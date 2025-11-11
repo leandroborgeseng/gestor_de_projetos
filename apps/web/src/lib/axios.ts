@@ -1,4 +1,5 @@
 import axios from "axios";
+import { syncCompanyContext, getActiveCompanyId } from "../utils/company.js";
 
 const api = axios.create({
   baseURL: "/api",
@@ -10,9 +11,15 @@ const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("accessToken");
-  if (token) {
+  if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  const activeCompanyId = getActiveCompanyId();
+  if (activeCompanyId && config.headers) {
+    config.headers["X-Company-Id"] = activeCompanyId;
+  }
+
   return config;
 });
 
@@ -35,10 +42,19 @@ api.interceptors.response.use(
           refreshToken,
         });
 
-        const { accessToken } = response.data;
+        const { accessToken, activeCompanyId, companies } = response.data;
         localStorage.setItem("accessToken", accessToken);
 
+        if (companies || activeCompanyId) {
+          syncCompanyContext(companies, activeCompanyId);
+        }
+
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        const companyId = getActiveCompanyId();
+        if (companyId) {
+          originalRequest.headers["X-Company-Id"] = companyId;
+        }
+
         return api(originalRequest);
       } catch (refreshError) {
         localStorage.removeItem("accessToken");

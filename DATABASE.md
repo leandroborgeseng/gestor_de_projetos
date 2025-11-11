@@ -17,6 +17,18 @@ O sistema foi projetado para gerenciar projetos ágeis com as seguintes funciona
 
 ---
 
+## Multiempresa
+
+O banco suporta múltiplas empresas (tenants) isoladas. Os principais componentes são:
+
+- `Company`: entidade raiz por tenant (nome, slug, plano, limites).
+- `CompanyUser`: relação entre usuários e empresas, com papéis (`OWNER`, `ADMIN`, `MEMBER`).
+- `Project`, `Resource`, `Skill`, `SavedFilter`, `Webhook`, `ActivityLog`, `Notification`: todas possuem `companyId` e são filtradas pelo cabeçalho `X-Company-Id` nas requisições.
+
+Durante a migração, todos os registros legados são vinculados à empresa padrão `company_default`. Após aplicar as migrations, utilize o script `migrate_companies.ts` ou o seed multiempresa para distribuir os dados conforme necessário.
+
+---
+
 ## Modelos de Dados
 
 ### 1. User (Usuário)
@@ -475,16 +487,18 @@ pnpm prisma migrate deploy
 
 ## Seed Data
 
-O arquivo `prisma/seed.ts` popula o banco com dados de exemplo:
-- 3 usuários (Admin, Manager, Member)
-- 7 projetos com diferentes características
-- Múltiplas sprints e tarefas
-- Recursos de exemplo
+O arquivo `prisma/seed.ts` popula o banco com dois tenants de exemplo:
+- **Alpha Tech Solutions**: owner, manager e developer; projetos SaaS e app mobile.
+- **Beta Logistics**: owner, manager e analyst; projetos de logística e analytics.
 
-Para executar o seed:
+Cada empresa recebe projetos, sprints, tarefas e recursos coerentes com o domínio. Para executar o seed (após `prisma migrate reset`):
 ```bash
 pnpm prisma db seed
 ```
+
+As credenciais criadas são:
+- Alpha: `ceo@alpha.com`, `pm@alpha.com`, `dev@alpha.com` (senha `alpha123`)
+- Beta: `diretoria@beta.com`, `operacoes@beta.com`, `analista@beta.com` (senha `beta123`)
 
 ---
 

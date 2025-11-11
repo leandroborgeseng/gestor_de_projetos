@@ -1,9 +1,15 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
+import { useHotkeys } from "react-hotkeys-hook";
 import api from "../lib/axios.js";
 import EditTaskModal from "../components/EditTaskModal.js";
 import CreateTaskModal from "../components/CreateTaskModal.js";
+import TaskTimer from "../components/TaskTimer.js";
+import TagFilter from "../components/TagFilter.js";
+import FilterManager from "../components/FilterManager.js";
+import ActivityTimeline from "../components/ActivityTimeline.js";
+import AlertBadge from "../components/AlertBadge.js";
 
 interface Task {
   id: string;
@@ -22,6 +28,7 @@ interface Task {
   parent?: { id: string; title: string };
   predecessorDependencies?: Array<{ predecessor: { id: string; title: string } }>;
   successorDependencies?: Array<{ successor: { id: string; title: string } }>;
+  tags?: Array<{ id: string; tag: { id: string; name: string; color: string } }>;
 }
 
 export default function Tasks() {
@@ -32,11 +39,20 @@ export default function Tasks() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [isFilterManagerOpen, setIsFilterManagerOpen] = useState(false);
   
   // Estado para edição inline
   const [editingCell, setEditingCell] = useState<{ taskId: string; field: string } | null>(null);
   const [editValue, setEditValue] = useState<string>("");
   const inputRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+
+  // Buscar alertas para exibir badges nas tarefas
+  const { data: alertsData } = useQuery<{ alerts: any[] }>({
+    queryKey: ["alerts"],
+    queryFn: () => api.get("/alerts").then((res) => res.data),
+    staleTime: 30000, // Cache por 30 segundos
+  });
 
   const { data: tasks, isLoading } = useQuery({
     queryKey: ["all-tasks", id],
@@ -223,14 +239,22 @@ export default function Tasks() {
   };
 
   // Filtrar tarefas
-  const filteredTasks = (tasks || []).filter((task: Task) => {
-    const matchesStatus = statusFilter === "all" || task.status === statusFilter;
-    const matchesSearch = 
-      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.assignee?.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const filteredTasks = useMemo(() => {
+    return (tasks || []).filter((task: Task) => {
+      const matchesStatus = statusFilter === "all" || task.status === statusFilter;
+      const matchesSearch = 
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.assignee?.name.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // Filtro por tags
+      const matchesTags = selectedTagIds.length === 0 || 
+        (task.tags && task.tags.length > 0 && 
+         selectedTagIds.some((tagId) => task.tags!.some((t) => t.tag.id === tagId)));
+      
+      return matchesStatus && matchesSearch && matchesTags;
+    });
+  }, [tasks, statusFilter, searchQuery, selectedTagIds]);
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -256,19 +280,142 @@ export default function Tasks() {
     return labels[status] || status;
   };
 
+  // Atalhos de teclado
+  useHotkeys(
+    "ctrl+n, cmd+n",
+    (e) => {
+      e.preventDefault();
+      setIsCreateModalOpen(true);
+    },
+    { enabled: !isCreateModalOpen && !isEditModalOpen && !isFilterManagerOpen }
+  );
+
+  useHotkeys(
+    "escape",
+    (e) => {
+      if (isCreateModalOpen || isEditModalOpen || isFilterManagerOpen) {
+        e.preventDefault();
+        setIsCreateModalOpen(false);
+        setIsEditModalOpen(false);
+        setIsFilterManagerOpen(false);
+        setSelectedTask(null);
+      }
+    },
+    { enabled: isCreateModalOpen || isEditModalOpen || isFilterManagerOpen }
+  );
+
+  // Atalho / para focar na busca
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useHotkeys(
+    "/",
+    (e) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+      e.preventDefault();
+      searchInputRef.current?.focus();
+    },
+    { enabled: !isCreateModalOpen && !isEditModalOpen && !isFilterManagerOpen }
+  );
+
   if (isLoading) {
     return <div className="text-center py-12 text-gray-400">Carregando tarefas...</div>;
   }
 
+  const handleTagToggle = (tagId: string) => {
+    setSelectedTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
+  };
+
+  const handleClearTags = () => {
+    setSelectedTagIds([]);
+  };
+
+  const handleApplyFilter = (filters: any) => {
+    // Aplicar filtro de status
+    if (filters.status) {
+      if (Array.isArray(filters.status) && filters.status.length > 0) {
+        setStatusFilter(filters.status[0]);
+      } else {
+        setStatusFilter(filters.status);
+      }
+    } else {
+      setStatusFilter("all");
+    }
+    
+    // Aplicar filtro de busca
+    if (filters.search) {
+      setSearchQuery(filters.search);
+    } else {
+      setSearchQuery("");
+    }
+    
+    // Aplicar filtro de tags
+    if (filters.tags && Array.isArray(filters.tags)) {
+      setSelectedTagIds(filters.tags);
+    } else if (filters.tags === undefined || filters.tags === null) {
+      setSelectedTagIds([]);
+    }
+    
+    // Filtros de assignee e overdue serão aplicados no filteredTasks
+  };
+
+  const getCurrentFilters = () => {
+    const filters: any = {};
+    if (statusFilter !== "all") {
+      filters.status = [statusFilter];
+    }
+    if (searchQuery) {
+      filters.search = searchQuery;
+    }
+    if (selectedTagIds.length > 0) {
+      filters.tags = selectedTagIds;
+    }
+    return filters;
+  };
+
+  const handleExportTasks = async (format: "excel" | "csv") => {
+    if (!id) return;
+    try {
+      const url = `/projects/${id}/export/tasks/${format}`;
+      const response = await api.get(url, {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data]);
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      
+      const extension = format === "excel" ? "xlsx" : "csv";
+      link.download = `tarefas-${new Date().toISOString().split("T")[0]}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error("Erro ao exportar:", error);
+      alert("Erro ao exportar tarefas. Tente novamente.");
+    }
+  };
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-100">Tarefas</h2>
-        <div className="flex gap-4 items-center">
+      <div className="mb-6 space-y-4">
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-gray-100">Tarefas</h2>
+          <div className="flex gap-4 items-center">
           {/* Busca */}
           <input
+            ref={searchInputRef}
             type="text"
-            placeholder="Buscar tarefas..."
+            placeholder="Buscar tarefas... (Pressione / para focar)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="px-4 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -289,11 +436,47 @@ export default function Tasks() {
             <option value="BLOCKED">Bloqueado</option>
           </select>
 
-          {/* Botão Nova Tarefa */}
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2 bg-indigo-700 text-white rounded-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2"
-          >
+          {/* Botões de Exportação */}
+          {id && (
+            <>
+              <button
+                onClick={() => handleExportTasks("excel")}
+                className="px-3 py-2 bg-green-700 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center gap-2 text-sm"
+                title="Exportar para Excel"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Excel
+              </button>
+              <button
+                onClick={() => handleExportTasks("csv")}
+                className="px-3 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 text-sm"
+                title="Exportar para CSV"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                CSV
+              </button>
+            </>
+          )}
+          {/* Botões de ação */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsFilterManagerOpen(true)}
+              className="px-4 py-2 bg-purple-700 text-white rounded-md hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-500 flex items-center gap-2"
+              title="Gerenciar filtros"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filtros
+            </button>
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="px-4 py-2 bg-indigo-700 text-white rounded-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2"
+            >
             <svg
               className="w-5 h-5"
               fill="none"
@@ -307,9 +490,21 @@ export default function Tasks() {
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            Nova Tarefa
-          </button>
+              Nova Tarefa
+            </button>
+          </div>
+          </div>
         </div>
+
+        {/* Filtro de Tags */}
+        {id && (
+          <TagFilter
+            projectId={id}
+            selectedTagIds={selectedTagIds}
+            onTagToggle={handleTagToggle}
+            onClearAll={handleClearTags}
+          />
+        )}
       </div>
 
       <div className="bg-gray-800 rounded-lg shadow overflow-hidden">
@@ -345,6 +540,9 @@ export default function Tasks() {
                   Horas
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  Cronômetro
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                   Ações
                 </th>
               </tr>
@@ -352,7 +550,7 @@ export default function Tasks() {
             <tbody className="bg-gray-800 divide-y divide-gray-700">
               {filteredTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-6 py-8 text-center text-gray-400">
+                  <td colSpan={11} className="px-6 py-8 text-center text-gray-400">
                     Nenhuma tarefa encontrada
                   </td>
                 </tr>
@@ -390,17 +588,31 @@ export default function Tasks() {
                               className="text-sm font-medium bg-gray-700 text-gray-100 px-2 py-1 rounded border border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             />
                           ) : (
-                            <div
-                              className="text-sm font-medium text-gray-100 cursor-pointer hover:text-indigo-400 transition-colors"
-                              onClick={() => startEditing(task.id, "title", task.title)}
-                              title="Clique para editar"
-                            >
-                              {task.title}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className="text-sm font-medium text-gray-100 cursor-pointer hover:text-indigo-400 transition-colors"
+                                onClick={() => startEditing(task.id, "title", task.title)}
+                                title="Clique para editar"
+                              >
+                                {task.title}
+                              </span>
                               {task.parent && (
-                                <span className="ml-2 text-xs text-gray-400">
+                                <span className="text-xs text-gray-400">
                                   (Subtarefa de: {task.parent.title})
                                 </span>
                               )}
+                              {/* Badges de alertas */}
+                              {alertsData?.alerts
+                                ?.filter((alert) => alert.entityType === "Task" && alert.entityId === task.id)
+                                .slice(0, 2)
+                                .map((alert) => (
+                                  <AlertBadge
+                                    key={alert.id}
+                                    type={alert.type}
+                                    severity={alert.severity}
+                                    title={alert.message}
+                                  />
+                                ))}
                             </div>
                           )}
                           {task.description && (
@@ -707,6 +919,11 @@ export default function Tasks() {
                           )}
                         </div>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <TaskTimer taskId={task.id} taskTitle={task.title} compact />
+                        </div>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <button
                           onClick={() => handleEditTask(task)}
@@ -760,7 +977,21 @@ export default function Tasks() {
           onSuccess={handleTaskUpdated}
         />
       )}
+
+      <FilterManager
+        type="tasks"
+        currentFilters={getCurrentFilters()}
+        onApplyFilter={handleApplyFilter}
+        isOpen={isFilterManagerOpen}
+        onClose={() => setIsFilterManagerOpen(false)}
+      />
+
+      {/* Histórico de Atividades */}
+      {id && (
+        <div className="mt-8">
+          <ActivityTimeline entityType="Project" entityId={id} limit={20} />
+        </div>
+      )}
     </div>
   );
 }
-

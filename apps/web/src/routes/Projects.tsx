@@ -6,7 +6,9 @@ import Navbar from "../components/Navbar.js";
 import TaskStatusChart from "../components/TaskStatusChart.js";
 import SearchBar from "../components/SearchBar.js";
 import ProjectsDashboard from "../components/ProjectsDashboard.js";
+import AlertsPanel from "../components/AlertsPanel.js";
 import { getCurrentUser } from "../utils/user.js";
+import CloneProjectModal from "../components/CloneProjectModal.js";
 
 interface Task {
   id: string;
@@ -44,26 +46,35 @@ export default function Projects() {
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [isTasksListExpanded, setIsTasksListExpanded] = useState(true);
   const [showMyTasks, setShowMyTasks] = useState(false);
-  const [sortColumn, setSortColumn] = useState<"name" | "progress" | "plannedCost" | "actualCost" | "period" | "createdAt" | null>(null);
+  const [sortColumn, setSortColumn] = useState<
+    "name" | "progress" | "plannedCost" | "actualCost" | "period" | "createdAt" | null
+  >(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [cloneModalOpen, setCloneModalOpen] = useState(false);
+  const [selectedProjectForClone, setSelectedProjectForClone] = useState<{ id: string; name: string } | null>(null);
 
-  // Obter usuário atual (considerando personificação)
   const currentUser = getCurrentUser();
   const currentUserId = currentUser?.id || "";
 
-  const { data: projects, isLoading } = useQuery<ProjectSummary[]>({
+  const { data: projects, isLoading, error } = useQuery<ProjectSummary[]>({
     queryKey: ["projects-summary", searchQuery, assigneeFilter, showMyTasks, currentUserId],
-    queryFn: () => {
+    queryFn: async () => {
       const params = new URLSearchParams();
       if (searchQuery) params.append("q", searchQuery);
-      // Se "O que é meu" estiver ativo, usar o ID do usuário logado
       const assigneeIdToUse = showMyTasks ? currentUserId : assigneeFilter;
       if (assigneeIdToUse) params.append("assigneeId", assigneeIdToUse);
-      return api.get(`/projects/summary?${params.toString()}`).then((res) => res.data);
+
+      try {
+        const response = await api.get(`/projects/summary?${params.toString()}`);
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (err) {
+        console.error("Erro ao buscar projetos:", err);
+        return [];
+      }
     },
   });
 
-  const { data: tasksByStatus, isLoading: isLoadingTasks } = useQuery<Task[]>({
+  const { data: tasksByStatus = [], isLoading: isLoadingTasks } = useQuery<Task[]>({
     queryKey: ["tasks-by-status", selectedStatus, showMyTasks, currentUserId],
     queryFn: () => {
       if (!selectedStatus) return Promise.resolve([]);
@@ -75,8 +86,6 @@ export default function Projects() {
     },
     enabled: !!selectedStatus,
   });
-
-  const filteredTasksByStatus = tasksByStatus;
 
   const handleStatusClick = (status: string) => {
     setSelectedStatus(status);
@@ -104,92 +113,98 @@ export default function Projects() {
     }).format(value);
   };
 
-  const handleSort = (column: "name" | "progress" | "plannedCost" | "actualCost" | "period" | "createdAt") => {
+  const handleSort = (
+    column: "name" | "progress" | "plannedCost" | "actualCost" | "period" | "createdAt"
+  ) => {
     if (sortColumn === column) {
-      // Se já está ordenando por esta coluna, inverte a direção
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
-      // Se é uma nova coluna, começa com ascendente
       setSortColumn(column);
       setSortDirection("asc");
     }
   };
 
-  // Ordenar projetos
-  const sortedProjects = projects ? [...projects].sort((a, b) => {
+  const sortedProjects = (projects && Array.isArray(projects) ? [...projects] : []).sort((a, b) => {
     if (sortColumn === "name") {
       const nameA = a.name.toLowerCase();
       const nameB = b.name.toLowerCase();
-      if (sortDirection === "asc") {
-        return nameA.localeCompare(nameB, "pt-BR");
-      } else {
-        return nameB.localeCompare(nameA, "pt-BR");
-      }
+      return sortDirection === "asc"
+        ? nameA.localeCompare(nameB, "pt-BR")
+        : nameB.localeCompare(nameA, "pt-BR");
     }
+
     if (sortColumn === "progress") {
       const progressA = a.completionPercentage || 0;
       const progressB = b.completionPercentage || 0;
-      if (sortDirection === "asc") {
-        return progressA - progressB;
-      } else {
-        return progressB - progressA;
-      }
+      return sortDirection === "asc" ? progressA - progressB : progressB - progressA;
     }
+
     if (sortColumn === "plannedCost") {
       const costA = a.totalPlanned || 0;
       const costB = b.totalPlanned || 0;
-      if (sortDirection === "asc") {
-        return costA - costB;
-      } else {
-        return costB - costA;
-      }
+      return sortDirection === "asc" ? costA - costB : costB - costA;
     }
+
     if (sortColumn === "actualCost") {
       const costA = a.totalActual || 0;
       const costB = b.totalActual || 0;
-      if (sortDirection === "asc") {
-        return costA - costB;
-      } else {
-        return costB - costA;
-      }
+      return sortDirection === "asc" ? costA - costB : costB - costA;
     }
+
     if (sortColumn === "period") {
       const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
       const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
-      if (sortDirection === "asc") {
-        return dateA - dateB;
-      } else {
-        return dateB - dateA;
-      }
+      return sortDirection === "asc" ? dateA - dateB : dateB - dateA;
     }
+
     if (sortColumn === "createdAt") {
       const dateA = new Date(a.createdAt).getTime();
       const dateB = new Date(b.createdAt).getTime();
-      if (sortDirection === "asc") {
-        return dateA - dateB;
-      } else {
-        return dateB - dateA;
-      }
+      return sortDirection === "asc" ? dateA - dateB : dateB - dateA;
     }
+
     return 0;
-  }) : [];
+  });
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-surface text-primary transition-colors duration-200">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-end items-center mb-6">
           <div className="flex gap-2">
             <Link
+              to="/analytics"
+              className="px-4 py-2 bg-cyan-700 text-white rounded-md hover:bg-cyan-600 flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                />
+              </svg>
+              Analytics
+            </Link>
+            <Link
+              to="/tags-management"
+              className="px-4 py-2 bg-emerald-700 text-white rounded-md hover:bg-emerald-600 flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+                />
+              </svg>
+              Gerenciar Tags
+            </Link>
+            <Link
               to="/access-management"
               className="px-4 py-2 bg-purple-700 text-white rounded-md hover:bg-purple-600 flex items-center gap-2"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -203,12 +218,7 @@ export default function Projects() {
               to="/users-management"
               className="px-4 py-2 bg-green-700 text-white rounded-md hover:bg-green-600 flex items-center gap-2"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -222,12 +232,7 @@ export default function Projects() {
               to="/projects-management"
               className="px-4 py-2 bg-orange-700 text-white rounded-md hover:bg-orange-600 flex items-center gap-2"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -240,21 +245,14 @@ export default function Projects() {
             <button
               onClick={() => {
                 setShowMyTasks(!showMyTasks);
-                setSelectedStatus(null); // Limpar filtro de status ao alternar
+                setSelectedStatus(null);
               }}
               className={`px-4 py-2 rounded-md flex items-center gap-2 transition-colors ${
-                showMyTasks
-                  ? "bg-yellow-600 text-white hover:bg-yellow-700"
-                  : "bg-yellow-700 text-white hover:bg-yellow-600"
+                showMyTasks ? "bg-yellow-600 text-white hover:bg-yellow-700" : "bg-yellow-700 text-white hover:bg-yellow-600"
               }`}
               title={showMyTasks ? "Mostrar todas as tarefas" : "Mostrar apenas minhas tarefas"}
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -276,12 +274,7 @@ export default function Projects() {
         {showMyTasks && (
           <div className="bg-indigo-900/20 border border-indigo-700 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-2">
-              <svg
-                className="w-5 h-5 text-indigo-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -302,15 +295,42 @@ export default function Projects() {
           </div>
         )}
 
-        <ProjectsDashboard 
-          onStatusClick={handleStatusClick}
-          showMyTasks={showMyTasks}
-          currentUserId={currentUserId}
-        />
+        <ProjectsDashboard onStatusClick={handleStatusClick} showMyTasks={showMyTasks} currentUserId={currentUserId} />
+
+        <div className="mb-6">
+          <AlertsPanel />
+        </div>
+
+        <section className="mb-6 bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-100">Gerenciar Projetos</h2>
+              <p className="text-sm text-gray-400 mt-1">
+                Organize projetos existentes, arquive iniciativas concluídas ou crie um novo projeto rapidamente.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to="/projects-management"
+                className="px-4 py-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 transition-colors"
+              >
+                Abrir gestão de projetos
+              </Link>
+              <Link
+                to="/projects/new"
+                className="px-4 py-2 bg-indigo-700 text-white rounded-md hover:bg-indigo-600 transition-colors flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Novo Projeto
+              </Link>
+            </div>
+          </div>
+        </section>
 
         <h2 className="text-2xl font-bold text-gray-100 mb-4">Projetos ativos:</h2>
 
-        {/* Lista de Tarefas Filtradas */}
         {selectedStatus && (
           <div className="bg-gray-800 rounded-lg shadow-lg mb-6">
             <div className="flex justify-between items-center p-6 border-b border-gray-700">
@@ -319,19 +339,15 @@ export default function Projects() {
                   Tarefas: {statusLabels[selectedStatus]}
                   {showMyTasks && " (Minhas tarefas)"}
                 </h2>
-                {filteredTasksByStatus && (
-                  <span className="text-sm text-gray-400">
-                    ({filteredTasksByStatus.length} {filteredTasksByStatus.length === 1 ? "tarefa" : "tarefas"})
-                  </span>
-                )}
-                {selectedStatus && (
-                  <button
-                    onClick={() => setSelectedStatus(null)}
-                    className="text-xs text-gray-400 hover:text-gray-300 px-2 py-1 rounded hover:bg-gray-700"
-                  >
-                    Limpar filtro
-                  </button>
-                )}
+                <span className="text-sm text-gray-400">
+                  ({tasksByStatus.length} {tasksByStatus.length === 1 ? "tarefa" : "tarefas"})
+                </span>
+                <button
+                  onClick={() => setSelectedStatus(null)}
+                  className="text-xs text-gray-400 hover:text-gray-300 px-2 py-1 rounded hover:bg-gray-700"
+                >
+                  Limpar filtro
+                </button>
               </div>
               <button
                 onClick={() => setIsTasksListExpanded(!isTasksListExpanded)}
@@ -344,12 +360,7 @@ export default function Projects() {
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
             </div>
@@ -358,13 +369,10 @@ export default function Projects() {
               <div className="p-6">
                 {isLoadingTasks ? (
                   <div className="text-center py-8 text-gray-400">Carregando tarefas...</div>
-                ) : filteredTasksByStatus && filteredTasksByStatus.length > 0 ? (
+                ) : tasksByStatus.length > 0 ? (
                   <div className="space-y-3">
-                    {filteredTasksByStatus.map((task) => (
-                      <div
-                        key={task.id}
-                        className="bg-gray-700 rounded-lg p-4 hover:bg-gray-600 transition-colors"
-                      >
+                    {tasksByStatus.map((task) => (
+                      <div key={task.id} className="bg-gray-700 rounded-lg p-4 hover:bg-gray-600 transition-colors">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
@@ -378,19 +386,12 @@ export default function Projects() {
                               </Link>
                             </div>
                             {task.description && (
-                              <p className="text-xs text-gray-400 mb-2 line-clamp-2">
-                                {task.description}
-                              </p>
+                              <p className="text-xs text-gray-400 mb-2 line-clamp-2">{task.description}</p>
                             )}
                             <div className="flex items-center gap-4 text-xs text-gray-400">
                               {task.assignee && (
                                 <span className="flex items-center gap-1">
-                                  <svg
-                                    className="w-3 h-3"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path
                                       strokeLinecap="round"
                                       strokeLinejoin="round"
@@ -403,12 +404,7 @@ export default function Projects() {
                               )}
                               {task.sprint && (
                                 <span className="flex items-center gap-1">
-                                  <svg
-                                    className="w-3 h-3"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path
                                       strokeLinecap="round"
                                       strokeLinejoin="round"
@@ -419,9 +415,7 @@ export default function Projects() {
                                   {task.sprint.name}
                                 </span>
                               )}
-                              {task.estimateHours && (
-                                <span>Est: {task.estimateHours.toFixed(1)}h</span>
-                              )}
+                              {task.estimateHours && <span>Est: {task.estimateHours.toFixed(1)}h</span>}
                             </div>
                           </div>
                           <Link
@@ -436,11 +430,11 @@ export default function Projects() {
                     ))}
                   </div>
                 ) : (
-                    <div className="text-center py-8 text-gray-400">
-                      {showMyTasks
-                        ? `Você não possui tarefas com status ${statusLabels[selectedStatus]}`
-                        : `Nenhuma tarefa encontrada com status ${statusLabels[selectedStatus]}`}
-                    </div>
+                  <div className="text-center py-8 text-gray-400">
+                    {showMyTasks
+                      ? `Você não possui tarefas com status ${statusLabels[selectedStatus]}`
+                      : `Nenhuma tarefa encontrada com status ${statusLabels[selectedStatus]}`}
+                  </div>
                 )}
               </div>
             )}
@@ -464,158 +458,103 @@ export default function Projects() {
 
         {isLoading ? (
           <div className="text-center py-12 text-gray-400">Carregando...</div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <div className="text-red-400 mb-2">Erro ao carregar projetos</div>
+            <div className="text-gray-400 text-sm">{String(error)}</div>
+          </div>
         ) : (
           <div className="bg-gray-800 rounded-lg shadow overflow-hidden">
             <table className="min-w-full divide-y divide-gray-700">
               <thead className="bg-gray-700">
                 <tr>
-                  <th 
+                  <th
                     className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-colors"
                     onClick={() => handleSort("name")}
                   >
                     <div className="flex items-center gap-2">
                       <span>Projeto</span>
                       {sortColumn === "name" && (
-                        <svg
-                          className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 15l7-7 7 7"
-                          />
+                        <svg className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                         </svg>
                       )}
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-6 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-colors"
                     onClick={() => handleSort("progress")}
                   >
                     <div className="flex items-center justify-center gap-2">
                       <span>Progresso</span>
                       {sortColumn === "progress" && (
-                        <svg
-                          className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 15l7-7 7 7"
-                          />
+                        <svg className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                         </svg>
                       )}
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-colors"
                     onClick={() => handleSort("plannedCost")}
                   >
                     <div className="flex items-center justify-end gap-2">
                       <span>Custo Planejado</span>
                       {sortColumn === "plannedCost" && (
-                        <svg
-                          className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 15l7-7 7 7"
-                          />
+                        <svg className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                         </svg>
                       )}
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-colors"
                     onClick={() => handleSort("actualCost")}
                   >
                     <div className="flex items-center justify-end gap-2">
                       <span>Custo Real</span>
                       {sortColumn === "actualCost" && (
-                        <svg
-                          className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 15l7-7 7 7"
-                          />
+                        <svg className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                         </svg>
                       )}
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-colors"
                     onClick={() => handleSort("period")}
                   >
                     <div className="flex items-center gap-2">
                       <span>Período</span>
                       {sortColumn === "period" && (
-                        <svg
-                          className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 15l7-7 7 7"
-                          />
+                        <svg className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                         </svg>
                       )}
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-colors"
                     onClick={() => handleSort("createdAt")}
                   >
                     <div className="flex items-center gap-2">
                       <span>Criado em</span>
                       {sortColumn === "createdAt" && (
-                        <svg
-                          className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 15l7-7 7 7"
-                          />
+                        <svg className={`w-4 h-4 ${sortDirection === "asc" ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                         </svg>
                       )}
                     </div>
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    Ações
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-gray-800 divide-y divide-gray-700">
-                {sortedProjects && sortedProjects.length > 0 ? (
+                {sortedProjects.length > 0 ? (
                   sortedProjects.map((project) => (
-                    <tr
-                      key={project.id}
-                      className="hover:bg-gray-700 cursor-pointer transition-colors"
-                    >
+                    <tr key={project.id} className="hover:bg-gray-700 cursor-pointer transition-colors">
                       <td
                         className="px-6 py-4 whitespace-nowrap"
                         onClick={() => (window.location.href = `/projects/${project.id}/board`)}
@@ -632,10 +571,7 @@ export default function Projects() {
                             <p className="text-xs text-gray-400 mt-1 max-w-md">{project.description}</p>
                           )}
                           <div className="mt-2">
-                            <TaskStatusChart
-                              tasksByStatus={project.tasksByStatus}
-                              totalTasks={project.totalTasks}
-                            />
+                            <TaskStatusChart tasksByStatus={project.tasksByStatus} totalTasks={project.totalTasks} />
                           </div>
                         </div>
                       </td>
@@ -658,9 +594,7 @@ export default function Projects() {
                               style={{ width: `${project.completionPercentage}%` }}
                             />
                           </div>
-                          <span className="text-sm font-medium text-gray-100">
-                            {project.completionPercentage}%
-                          </span>
+                          <span className="text-sm font-medium text-gray-100">{project.completionPercentage}%</span>
                           <span className="text-xs text-gray-400">
                             {project.tasksByStatus.DONE || 0} de {project.totalTasks} tarefas
                           </span>
@@ -680,9 +614,7 @@ export default function Projects() {
                         {project.totalPlanned > 0 && (
                           <div
                             className={`text-xs mt-1 ${
-                              project.totalActual > project.totalPlanned
-                                ? "text-red-400"
-                                : "text-green-400"
+                              project.totalActual > project.totalPlanned ? "text-red-400" : "text-green-400"
                             }`}
                           >
                             {project.totalActual > project.totalPlanned ? "+" : ""}
@@ -704,11 +636,31 @@ export default function Projects() {
                       >
                         {formatDate(project.createdAt)}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => {
+                            setSelectedProjectForClone({ id: project.id, name: project.name });
+                            setCloneModalOpen(true);
+                          }}
+                          className="px-3 py-1 bg-purple-700 text-white rounded-md hover:bg-purple-600 text-xs flex items-center gap-1"
+                          title="Clonar projeto"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            />
+                          </svg>
+                          Clonar
+                        </button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-400">
                       {searchQuery || assigneeFilter ? (
                         <div>
                           <p className="mb-2">Nenhum projeto encontrado com os filtros aplicados.</p>
@@ -733,6 +685,18 @@ export default function Projects() {
           </div>
         )}
       </div>
+
+      {selectedProjectForClone && (
+        <CloneProjectModal
+          projectId={selectedProjectForClone.id}
+          projectName={selectedProjectForClone.name}
+          isOpen={cloneModalOpen}
+          onClose={() => {
+            setCloneModalOpen(false);
+            setSelectedProjectForClone(null);
+          }}
+        />
+      )}
     </div>
   );
 }

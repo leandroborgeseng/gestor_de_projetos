@@ -25,15 +25,23 @@ model User {
   passwordHash       String
   role               Role            @default(MEMBER)
   hourlyRate         Decimal?        @db.Decimal(10, 2)
+  active             Boolean         @default(true)
   tasks              Task[]
   timeEntries        TimeEntry[]
   ownedProjects      Project[]       @relation("ProjectOwner")
   projectMemberships ProjectMember[]
+  companyMemberships CompanyUser[]
+  activityLogs       ActivityLog[]
+  notifications      Notification[]
+  fileAttachments    FileAttachment[]
+  comments           Comment[]
+  savedFilters       SavedFilter[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
 
 enum Role {
+  SUPERADMIN
   ADMIN
   MANAGER
   MEMBER
@@ -41,6 +49,18 @@ enum Role {
 
 enum ProjectRole {
   PROJECT_MANAGER
+  MEMBER
+}
+
+enum CompanyPlan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum CompanyUserRole {
+  OWNER
+  ADMIN
   MEMBER
 }
 
@@ -59,14 +79,20 @@ model Project {
   description       String?
   defaultHourlyRate Decimal?        @db.Decimal(10, 2)
   archived          Boolean         @default(false)
+  companyId         String
   ownerId           String
   owner             User            @relation("ProjectOwner", fields: [ownerId], references: [id])
+  company           Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   members           ProjectMember[]
   sprints           Sprint[]
   tasks             Task[]
   columns           KanbanColumn[]
+  tags               Tag[]
+  webhooks          Webhook[]
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
+
+  @@index([companyId])
 }
 
 model KanbanColumn {
@@ -91,16 +117,54 @@ model Sprint {
   updatedAt DateTime @updatedAt
 }
 
+model Skill {
+  id             String          @id @default(cuid())
+  name           String
+  description    String?
+  category       String?         // Categoria da habilidade (ex: "Frontend", "Backend", "Design")
+  companyId      String
+  resourceSkills ResourceSkill[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
 model Resource {
-  id        String   @id @default(cuid())
-  name      String
-  type      String
-  unitCost  Decimal  @db.Decimal(10, 2)
-  unit      String
-  notes     String?
-  tasks     Task[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String          @id @default(cuid())
+  name           String
+  type           String
+  unitCost       Decimal         @db.Decimal(10, 2)
+  unit           String
+  notes          String?
+  companyId      String
+  availableHours Float?          // Horas disponíveis (apenas para tipo "pessoa")
+  tasks          Task[]
+  resourceSkills ResourceSkill[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model ResourceSkill {
+  id         String   @id @default(cuid())
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  skillId    String
+  skill      Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  score      Float    @default(0) // Nível de desempenho de 0 a 10
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([resourceId, skillId])
+  @@index([resourceId])
+  @@index([skillId])
 }
 
 model Task {
@@ -131,8 +195,17 @@ model Task {
   predecessorDependencies TaskDependency[] @relation("PredecessorTasks")
   // Dependências - tarefas sucessoras (que dependem desta)
   successorDependencies   TaskDependency[] @relation("SuccessorTasks")
+  fileAttachments         FileAttachment[]
+  comments                Comment[]
+  tags                    TaskTag[]
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, status])
+  @@index([assigneeId])
+  @@index([sprintId])
+  @@index([dueDate])
 }
 
 model TaskDependency {
@@ -196,4 +269,246 @@ model Permission {
 
   @@unique([role, resource, action])
   @@index([role])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entityType String   // "Task", "Project", "Sprint", "User", "TimeEntry", etc.
+  entityId   String
+  action     String   // "created", "updated", "deleted", "moved", "assigned", etc.
+  changes    Json?    // Objeto com { field: [oldValue, newValue] }
+  metadata   Json?    // Informações extras (IP, userAgent, etc.)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([companyId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type       String   // "task_assigned", "task_updated", "comment", "deadline", "project_updated", etc.
+  title      String
+  message    String
+  read       Boolean  @default(false)
+  entityType String?  // "Task", "Project", "Sprint", etc.
+  entityId   String?
+  link       String?  // URL para navegar quando clicar na notificação
+  createdAt  DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([companyId])
+  @@index([createdAt])
+}
+
+model FileAttachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileName     String   // Nome único no storage
+  originalName String   // Nome original do arquivo
+  mimeType     String
+  size         Int      // Tamanho em bytes
+  path         String   // Caminho no storage
+  url          String   // URL para acesso
+  createdAt    DateTime @default(now())
+
+  @@index([taskId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  parentId  String?  // Para comentários em resposta a outros comentários
+  parent    Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[] @relation("CommentReplies")
+  editedAt  DateTime? // Data da última edição
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([taskId])
+  @@index([userId])
+  @@index([parentId])
+  @@index([createdAt])
+}
+
+model Tag {
+  id          String    @id @default(cuid())
+  name        String
+  color       String    @default("#6366f1") // Cor padrão indigo
+  companyId   String
+  projectId   String?   // null = tag global, String = tag do projeto
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks       TaskTag[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([name])
+}
+
+model TaskTag {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, tagId]) // Cada tag só pode ser associada uma vez por tarefa
+  @@index([taskId])
+  @@index([tagId])
+}
+
+model ProjectTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  structure   Json     // Estrutura do projeto: colunas, tarefas padrão, sprints, etc.
+  isSystem    Boolean  @default(false) // Templates do sistema não podem ser deletados
+  createdBy   String?  // ID do usuário que criou (null para templates do sistema)
+  companyId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([isSystem])
+  @@index([createdBy])
+  @@index([companyId])
+}
+
+model SavedFilter {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  type        String   // "tasks", "projects", "sprints", etc.
+  filters     Json     // Estrutura de filtros: { status: [...], assignee: [...], etc. }
+  isQuick     Boolean  @default(false) // Filtro rápido pré-definido
+  isShared    Boolean  @default(false) // Compartilhado com outros usuários (futuro)
+  companyId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([isQuick])
+  @@index([companyId])
+}
+
+model Webhook {
+  id          String       @id @default(cuid())
+  companyId   String
+  projectId   String?
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url         String
+  events      String[]     // Array de eventos: ["task.created", "task.updated", etc.]
+  secret      String?      // Secret para assinatura HMAC
+  active      Boolean      @default(true)
+  description String?
+  logs        WebhookLog[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([active])
+}
+
+model WebhookLog {
+  id          String   @id @default(cuid())
+  webhookId   String
+  webhook     Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event       String
+  status      String   // "success", "failed", "pending"
+  statusCode  Int?
+  response    String?  // Resposta do servidor
+  error       String?  // Mensagem de erro
+  retryCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([webhookId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Company {
+  id                String          @id @default(cuid())
+  name              String
+  slug              String          @unique
+  plan              CompanyPlan     @default(FREE)
+  isActive          Boolean         @default(true)
+  maxUsers          Int?
+  maxProjects       Int?
+  maxStorageMb      Int?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  primaryColor      String?         @db.VarChar(10)
+  secondaryColor    String?         @db.VarChar(10)
+  accentColor       String?         @db.VarChar(10)
+  backgroundColor   String?         @db.VarChar(10)
+  logoUrl           String?
+  logoKey           String?
+  lightPrimaryColor      String?    @db.VarChar(10)
+  lightSecondaryColor    String?    @db.VarChar(10)
+  lightAccentColor       String?    @db.VarChar(10)
+  lightBackgroundColor   String?    @db.VarChar(10)
+  lightLogoUrl           String?
+  lightLogoKey           String?
+
+  users             CompanyUser[]
+  projects          Project[]
+  resources         Resource[]
+  skills            Skill[]
+  tags              Tag[]
+  templates         ProjectTemplate[]
+  savedFilters      SavedFilter[]
+  webhooks          Webhook[]
+  notifications     Notification[]
+  activityLogs      ActivityLog[]
+
+  @@index([isActive])
+}
+
+model CompanyUser {
+  id         String          @id @default(cuid())
+  companyId  String
+  userId     String
+  role       CompanyUserRole @default(MEMBER)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  company    Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([userId])
+  @@index([companyId])
 }

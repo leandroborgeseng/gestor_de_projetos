@@ -3,9 +3,11 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/axios.js";
 import Navbar from "../components/Navbar.js";
+import TemplateSelector from "../components/TemplateSelector.js";
 
 export default function NewProject() {
   const navigate = useNavigate();
+  const [isTemplateSelectorOpen, setIsTemplateSelectorOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -51,7 +53,7 @@ export default function NewProject() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-surface text-primary transition-colors duration-200">
       <Navbar />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
@@ -76,6 +78,28 @@ export default function NewProject() {
           </button>
           <h1 className="text-3xl font-bold text-gray-100">Criar Novo Projeto</h1>
           <p className="text-gray-400 mt-2">Preencha os dados para criar um novo projeto</p>
+        </div>
+
+        <div className="mb-6 flex gap-4">
+          <button
+            onClick={() => setIsTemplateSelectorOpen(true)}
+            className="px-6 py-3 bg-purple-700 text-white rounded-md hover:bg-purple-600 flex items-center gap-2"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"
+              />
+            </svg>
+            Criar a partir de Template
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-gray-800 rounded-lg shadow p-6 space-y-6">
@@ -223,6 +247,11 @@ export default function NewProject() {
           </div>
         </form>
       </div>
+
+      <TemplateSelector
+        isOpen={isTemplateSelectorOpen}
+        onClose={() => setIsTemplateSelectorOpen(false)}
+      />
     </div>
   );
 }

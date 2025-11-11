@@ -96,8 +96,8 @@ export default function People() {
 
   // Atualizar role do membro
   const updateMemberMutation = useMutation({
-    mutationFn: ({ memberId, role }: { memberId: string; role: "PROJECT_MANAGER" | "MEMBER" }) =>
-      api.patch(`/projects/${selectedProjectId}/members/${memberId}`, { role }),
+    mutationFn: ({ projectId, memberId, role }: { projectId: string; memberId: string; role: "PROJECT_MANAGER" | "MEMBER" }) =>
+      api.patch(`/projects/${projectId}/members/${memberId}`, { role }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-members", selectedProjectId] });
       queryClient.invalidateQueries({ queryKey: ["all-projects-members"] });
@@ -109,8 +109,8 @@ export default function People() {
 
   // Remover membro
   const removeMemberMutation = useMutation({
-    mutationFn: (memberId: string) =>
-      api.delete(`/projects/${selectedProjectId}/members/${memberId}`),
+    mutationFn: ({ projectId, memberId }: { projectId: string; memberId: string }) =>
+      api.delete(`/projects/${projectId}/members/${memberId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-members", selectedProjectId] });
       queryClient.invalidateQueries({ queryKey: ["all-projects-members"] });
@@ -125,14 +125,13 @@ export default function People() {
     addMemberMutation.mutate({ userId: selectedUserId, role: selectedRole });
   };
 
-  const handleUpdateRole = (memberId: string, newRole: "PROJECT_MANAGER" | "MEMBER") => {
-    if (!selectedProjectId) return;
-    updateMemberMutation.mutate({ memberId, role: newRole });
+  const handleUpdateRole = (projectId: string, memberId: string, newRole: "PROJECT_MANAGER" | "MEMBER") => {
+    updateMemberMutation.mutate({ projectId, memberId, role: newRole });
   };
 
-  const handleRemoveMember = (memberId: string, userName: string) => {
+  const handleRemoveMember = (projectId: string, memberId: string, userName: string) => {
     if (!window.confirm(`Tem certeza que deseja remover ${userName} deste projeto?`)) return;
-    removeMemberMutation.mutate(memberId);
+    removeMemberMutation.mutate({ projectId, memberId });
   };
 
   const toggleProjectExpansion = (projectId: string) => {
@@ -292,6 +291,9 @@ export default function People() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                   Taxa Horária
                                 </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                  Ações
+                                </th>
                               </tr>
                             </thead>
                             <tbody className="bg-gray-800 divide-y divide-gray-700">
@@ -309,14 +311,53 @@ export default function People() {
                                     </span>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                    <span className={`px-2 py-1 rounded text-xs ${getRoleColor(member.role)}`}>
-                                      {getRoleLabel(member.role)}
-                                    </span>
+                                    {member.role === "OWNER" ? (
+                                      <span className={`px-2 py-1 rounded text-xs ${getRoleColor(member.role)}`}>
+                                        {getRoleLabel(member.role)}
+                                      </span>
+                                    ) : (
+                                      <select
+                                        value={member.role}
+                                        onChange={(e) => {
+                                          const newRole = e.target.value as "PROJECT_MANAGER" | "MEMBER";
+                                          handleUpdateRole(project.id, member.id, newRole);
+                                        }}
+                                        disabled={updateMemberMutation.isPending}
+                                        className="px-2 py-1 rounded text-xs bg-gray-700 text-gray-100 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        <option value="MEMBER">Membro</option>
+                                        <option value="PROJECT_MANAGER">Gerente do Projeto</option>
+                                      </select>
+                                    )}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                                     {member.user.hourlyRate
                                       ? `R$ ${Number(member.user.hourlyRate).toFixed(2)}/h`
                                       : "N/A"}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                    {member.role !== "OWNER" && (
+                                      <button
+                                        onClick={() => handleRemoveMember(project.id, member.id, member.user.name)}
+                                        disabled={removeMemberMutation.isPending}
+                                        className="text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Remover membro"
+                                      >
+                                        <svg
+                                          className="w-5 h-5"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                          />
+                                        </svg>
+                                      </button>
+                                    )}
                                   </td>
                                 </tr>
                               ))}
@@ -468,8 +509,9 @@ export default function People() {
                           ) : (
                             <select
                               value={member.role}
-                              onChange={(e) =>
+                                        onChange={(e) =>
                                 handleUpdateRole(
+                                  selectedProjectId!,
                                   member.id,
                                   e.target.value as "PROJECT_MANAGER" | "MEMBER"
                                 )
@@ -489,7 +531,7 @@ export default function People() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           {member.role !== "OWNER" && (
                             <button
-                              onClick={() => handleRemoveMember(member.id, member.user.name)}
+                              onClick={() => handleRemoveMember(selectedProjectId!, member.id, member.user.name)}
                               className="text-red-400 hover:text-red-300 transition-colors"
                               title="Remover membro"
                             >
@@ -546,7 +588,7 @@ export default function People() {
 
   // Se é página standalone, mostra com Navbar
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-surface text-primary transition-colors duration-200">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {content}

@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../../db/prisma.js";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../../auth/jwt.js";
 import { handleError } from "../../utils/errors.js";
+import { CompanyPlan, CompanyUserRole } from "@prisma/client";
 
 const RegisterSchema = z.object({
   name: z.string().min(1),
@@ -15,6 +16,92 @@ const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string(),
 });
+
+async function ensureDefaultCompany() {
+  return prisma.company.upsert({
+    where: { slug: "empresa-padrao" },
+    update: {},
+    create: {
+      id: "company_default",
+      name: "Empresa Padrão",
+      slug: "empresa-padrao",
+      plan: CompanyPlan.PRO,
+      maxUsers: 100,
+      maxProjects: 200,
+    },
+  });
+}
+
+async function upsertMembership(userId: string, companyId: string, role: CompanyUserRole) {
+  await prisma.companyUser.upsert({
+    where: {
+      companyId_userId: {
+        companyId,
+        userId,
+      },
+    },
+    update: {
+      role,
+    },
+    create: {
+      companyId,
+      userId,
+      role,
+    },
+  });
+}
+
+async function buildCompanyContext(userId: string) {
+  const memberships = await prisma.companyUser.findMany({
+     where: { userId },
+     include: {
+       company: {
+         select: {
+           id: true,
+           name: true,
+           slug: true,
+           plan: true,
+           isActive: true,
+           maxUsers: true,
+           maxProjects: true,
+           maxStorageMb: true,
+           primaryColor: true,
+           secondaryColor: true,
+           accentColor: true,
+           backgroundColor: true,
+           logoUrl: true,
+         },
+       },
+     },
+     orderBy: { createdAt: "asc" },
+   });
+ 
+   const companies = memberships.map((membership) => ({
+     id: membership.company.id,
+     name: membership.company.name,
+     slug: membership.company.slug,
+     plan: membership.company.plan,
+     isActive: membership.company.isActive,
+     maxUsers: membership.company.maxUsers,
+     maxProjects: membership.company.maxProjects,
+     maxStorageMb: membership.company.maxStorageMb,
+     role: membership.role,
+     primaryColor: membership.company.primaryColor,
+     secondaryColor: membership.company.secondaryColor,
+     accentColor: membership.company.accentColor,
+     backgroundColor: membership.company.backgroundColor,
+     logoUrl: membership.company.logoUrl,
+   }));
+
+  const tokenCompanies = memberships.map((membership) => ({
+    companyId: membership.companyId,
+    role: membership.role,
+  }));
+
+  const activeCompanyId = companies.find((company) => company.isActive)?.id || tokenCompanies[0]?.companyId;
+
+  return { companies, tokenCompanies, activeCompanyId };
+}
 
 export async function register(req: Request, res: Response) {
   try {
@@ -35,12 +122,26 @@ export async function register(req: Request, res: Response) {
       data: { name, email, passwordHash },
     });
 
-    const payload = { userId: user.id, email: user.email, role: user.role };
+    const defaultCompany = await ensureDefaultCompany();
+    await upsertMembership(user.id, defaultCompany.id, CompanyUserRole.OWNER);
+
+    const { companies, tokenCompanies, activeCompanyId } = await buildCompanyContext(user.id);
+
+    const payload = {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      companies: tokenCompanies,
+      activeCompanyId,
+    };
+
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
     res.status(201).json({
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      companies,
+      activeCompanyId,
       accessToken,
       refreshToken,
     });
@@ -68,12 +169,31 @@ export async function login(req: Request, res: Response) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const payload = { userId: user.id, email: user.email, role: user.role };
+    const { companies, tokenCompanies, activeCompanyId } = await buildCompanyContext(user.id);
+
+    if (tokenCompanies.length === 0) {
+      const defaultCompany = await ensureDefaultCompany();
+      await upsertMembership(user.id, defaultCompany.id, CompanyUserRole.MEMBER);
+      const refreshed = await buildCompanyContext(user.id);
+      companies.splice(0, companies.length, ...refreshed.companies);
+      tokenCompanies.splice(0, tokenCompanies.length, ...refreshed.tokenCompanies);
+    }
+
+    const payload = {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      companies: tokenCompanies,
+      activeCompanyId: activeCompanyId || tokenCompanies[0]?.companyId,
+    };
+
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
     res.json({
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      companies,
+      activeCompanyId: payload.activeCompanyId,
       accessToken,
       refreshToken,
     });
@@ -95,10 +215,19 @@ export async function refresh(req: Request, res: Response) {
       return res.status(401).json({ error: "User not found" });
     }
 
-    const newPayload = { userId: user.id, email: user.email, role: user.role };
+    const { tokenCompanies, activeCompanyId } = await buildCompanyContext(user.id);
+
+    const newPayload = {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      companies: tokenCompanies,
+      activeCompanyId,
+    };
+
     const newAccessToken = generateAccessToken(newPayload);
 
-    res.json({ accessToken: newAccessToken });
+    res.json({ accessToken: newAccessToken, activeCompanyId, companies: tokenCompanies });
   } catch (error) {
     return res.status(401).json({ error: "Invalid refresh token" });
   }

@@ -13,13 +13,14 @@ const UpdateMemberSchema = z.object({
 });
 
 // Verificar se o usuário tem permissão para gerenciar o projeto
-async function canManageProject(userId: string, userRole: string, projectId: string): Promise<boolean> {
+async function canManageProject(userId: string, userRole: string, projectId: string, companyId?: string): Promise<boolean> {
+  if (!companyId) return false;
   // ADMIN pode gerenciar qualquer projeto
   if (userRole === "ADMIN") return true;
 
   // Verificar se é o dono do projeto
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, companyId },
     select: { ownerId: true },
   });
 
@@ -33,9 +34,14 @@ async function canManageProject(userId: string, userRole: string, projectId: str
         userId,
       },
     },
+    include: {
+      project: {
+        select: { companyId: true },
+      },
+    },
   });
 
-  if (membership?.role === "PROJECT_MANAGER") return true;
+  if (membership?.role === "PROJECT_MANAGER" && membership.project?.companyId === companyId) return true;
 
   // MANAGER global também pode gerenciar (se tiver role MANAGER)
   if (userRole === "MANAGER") return true;
@@ -49,14 +55,38 @@ export async function getProjectMembers(req: Request, res: Response) {
     const { projectId } = req.params;
     const userId = req.user?.userId;
     const userRole = req.user?.role;
+    const companyId = req.companyId;
 
     if (!userId || !userRole) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
     // Verificar se tem permissão para ver membros
-    if (!(await canManageProject(userId, userRole, projectId))) {
+    if (!(await canManageProject(userId, userRole, projectId, companyId))) {
       return res.status(403).json({ error: "Você não tem permissão para ver membros deste projeto" });
+    }
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, companyId },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            hourlyRate: true,
+          },
+        },
+      },
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: "Projeto não encontrado" });
     }
 
     const members = await prisma.projectMember.findMany({
@@ -73,22 +103,6 @@ export async function getProjectMembers(req: Request, res: Response) {
         },
       },
       orderBy: { createdAt: "desc" },
-    });
-
-    // Incluir o dono do projeto
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-            hourlyRate: true,
-          },
-        },
-      },
     });
 
     const allMembers = [
@@ -119,13 +133,18 @@ export async function addProjectMember(req: Request, res: Response) {
     const { projectId } = req.params;
     const userId = req.user?.userId;
     const userRole = req.user?.role;
+    const companyId = req.companyId;
 
     if (!userId || !userRole) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
     // Verificar permissão
-    if (!(await canManageProject(userId, userRole, projectId))) {
+    if (!(await canManageProject(userId, userRole, projectId, companyId))) {
       return res.status(403).json({ error: "Você não tem permissão para adicionar membros a este projeto" });
     }
 
@@ -151,13 +170,26 @@ export async function addProjectMember(req: Request, res: Response) {
     }
 
     // Verificar se está tentando adicionar o dono
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, companyId },
       select: { ownerId: true },
     });
 
     if (project?.ownerId === newMemberId) {
       return res.status(400).json({ error: "O dono do projeto já está automaticamente incluído" });
+    }
+
+    const memberCompanyAssociation = await prisma.companyUser.findUnique({
+      where: {
+        companyId_userId: {
+          companyId,
+          userId: newMemberId,
+        },
+      },
+    });
+
+    if (!memberCompanyAssociation) {
+      return res.status(400).json({ error: "Usuário não pertence à empresa selecionada" });
     }
 
     const member = await prisma.projectMember.create({
@@ -191,19 +223,41 @@ export async function updateProjectMember(req: Request, res: Response) {
     const { projectId, memberId } = req.params;
     const userId = req.user?.userId;
     const userRole = req.user?.role;
+    const companyId = req.companyId;
 
     if (!userId || !userRole) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
     // Verificar permissão
-    if (!(await canManageProject(userId, userRole, projectId))) {
+    if (!(await canManageProject(userId, userRole, projectId, companyId))) {
       return res.status(403).json({ error: "Você não tem permissão para atualizar membros deste projeto" });
     }
 
     const parse = UpdateMemberSchema.safeParse(req.body);
     if (!parse.success) {
       return res.status(400).json({ error: parse.error.flatten() });
+    }
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, companyId },
+      select: { id: true },
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: "Projeto não encontrado" });
+    }
+
+    const membership = await prisma.projectMember.findFirst({
+      where: { id: memberId, projectId },
+    });
+
+    if (!membership) {
+      return res.status(404).json({ error: "Membro não encontrado" });
     }
 
     const member = await prisma.projectMember.update({
@@ -234,14 +288,36 @@ export async function removeProjectMember(req: Request, res: Response) {
     const { projectId, memberId } = req.params;
     const userId = req.user?.userId;
     const userRole = req.user?.role;
+    const companyId = req.companyId;
 
     if (!userId || !userRole) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
     // Verificar permissão
-    if (!(await canManageProject(userId, userRole, projectId))) {
+    if (!(await canManageProject(userId, userRole, projectId, companyId))) {
       return res.status(403).json({ error: "Você não tem permissão para remover membros deste projeto" });
+    }
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, companyId },
+      select: { id: true },
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: "Projeto não encontrado" });
+    }
+
+    const membership = await prisma.projectMember.findFirst({
+      where: { id: memberId, projectId },
+    });
+
+    if (!membership) {
+      return res.status(404).json({ error: "Membro não encontrado" });
     }
 
     await prisma.projectMember.delete({

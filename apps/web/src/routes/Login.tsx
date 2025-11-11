@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/axios.js";
+import { syncCompanyContext } from "../utils/company.js";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -16,13 +17,15 @@ export default function Login() {
 
     try {
       const response = await api.post("/auth/login", { email, password });
-      const { accessToken, refreshToken, user } = response.data;
+      const { accessToken, refreshToken, user, companies, activeCompanyId } = response.data;
 
       localStorage.setItem("accessToken", accessToken);
       localStorage.setItem("refreshToken", refreshToken);
       localStorage.setItem("user", JSON.stringify(user));
       // Limpar personificação ao fazer login
       localStorage.removeItem("impersonatedUser");
+
+      syncCompanyContext(companies ?? [], activeCompanyId ?? companies?.[0]?.id ?? null);
 
       navigate("/");
     } catch (err: any) {
@@ -33,7 +36,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900">
+    <div className="min-h-screen flex items-center justify-center bg-surface text-primary transition-colors duration-200">
       <div className="max-w-md w-full space-y-8 p-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-100">

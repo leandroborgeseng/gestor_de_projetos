@@ -6,6 +6,9 @@ Sistema completo de gerenciamento de projetos ágeis com Kanban, Gantt, Sprints 
 
 - **[Manual do Usuário](./MANUAL_DO_USUARIO.md)** - Guia completo para usuários finais
 - **[Documentação do Banco de Dados](./DATABASE.md)** - Estrutura e relacionamentos do banco de dados
+- **[Guia de Deploy em Produção](./DEPLOY.md)** - Como fazer deploy usando Docker Compose
+- **[Roadmap de Desenvolvimento](./ROADMAP.md)** - Plano estratégico de melhorias e novas funcionalidades
+- **[Plano de Execução](./PLANO_DE_EXECUCAO.md)** - Guia prático detalhado para implementação
 
 ## Stack
 
@@ -55,8 +58,7 @@ docker-compose up -d
 4. **Configurar banco de dados:**
 ```bash
 cd apps/api
-pnpm prisma generate
-pnpm prisma migrate dev --name init
+pnpm prisma migrate deploy
 pnpm prisma db seed
 ```
 
@@ -80,12 +82,19 @@ pnpm dev
 
 ### 🔑 Credenciais de Teste
 
-- Email: `admin@example.com`
-- Senha: `admin123`
+**Alpha Tech Solutions**
+- `ceo@alpha.com` / `alpha123`
+- `pm@alpha.com` / `alpha123`
+- `dev@alpha.com` / `alpha123`
 
-Outros usuários disponíveis:
-- `manager@example.com` / `manager123`
-- `member@example.com` / `member123`
+**Beta Logistics**
+- `diretoria@beta.com` / `beta123`
+- `operacoes@beta.com` / `beta123`
+- `analista@beta.com` / `beta123`
+
+Após logar, utilize o seletor de empresa no topo da interface para alternar entre os tenants.
+
+> **API:** todas as chamadas autenticadas devem enviar o cabeçalho `X-Company-Id` com o ID da empresa ativa. O frontend já injeta esse cabeçalho automaticamente.
 
 ## 📁 Estrutura
 
@@ -93,6 +102,8 @@ Outros usuários disponíveis:
 - `/apps/web` - Frontend React + Vite
 
 ## 🛠️ Comandos Úteis
+
+### Desenvolvimento
 
 ```bash
 # Resetar banco de dados
@@ -106,4 +117,24 @@ docker-compose logs -f db
 # Parar o banco
 docker-compose down
 ```
+
+### Produção
+
+```bash
+# Deploy completo (usando script)
+./scripts/deploy.sh
+
+# Ou manualmente:
+docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
+
+# Ver logs
+docker-compose -f docker-compose.prod.yml --env-file .env.production logs -f
+
+# Parar serviços
+docker-compose -f docker-compose.prod.yml --env-file .env.production down
+```
+
+📖 **Para mais detalhes sobre deploy, consulte:**
+- **[Guia de Deploy Geral](./DEPLOY.md)** - Deploy em qualquer ambiente
+- **[Guia de Deploy Ubuntu 24](./DEPLOY_UBUNTU.md)** - Deploy específico para Ubuntu 24
 

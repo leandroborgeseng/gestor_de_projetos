@@ -12,11 +12,12 @@
 8. [Sprints](#sprints)
 9. [Pessoas e Recursos](#pessoas-e-recursos)
 10. [Relatórios Financeiros](#relatórios-financeiros)
-11. [Gerenciamento de Usuários](#gerenciamento-de-usuários)
-12. [Gerenciamento de Acessos](#gerenciamento-de-acessos)
-13. [Configurações](#configurações)
-14. [Perfil do Usuário](#perfil-do-usuário)
-15. [Dicas e Truques](#dicas-e-truques)
+11. [Dashboard Analítico](#dashboard-analítico)
+12. [Calendário e iCal](#calendário-e-ical)
+13. [Webhooks](#webhooks)
+14. [Configurações](#configurações)
+15. [Perfil do Usuário](#perfil-do-usuário)
+16. [Dicas e Truques](#dicas-e-truques)
 
 ---
 
@@ -44,11 +45,22 @@ O **Agile Project Manager** é um sistema completo de gerenciamento de projetos 
 
 ### Credenciais de Teste
 
-Para testar o sistema, você pode usar:
+- **Alpha Tech Solutions**
+  - Owner: `ceo@alpha.com` / `alpha123`
+  - Manager: `pm@alpha.com` / `alpha123`
+  - Member: `dev@alpha.com` / `alpha123`
+- **Beta Logistics**
+  - Owner: `diretoria@beta.com` / `beta123`
+  - Manager: `operacoes@beta.com` / `beta123`
+  - Analyst: `analista@beta.com` / `beta123`
 
-- **Admin:** `admin@example.com` / `admin123`
-- **Gerente:** `manager@example.com` / `manager123`
-- **Membro:** `member@example.com` / `member123`
+Ao entrar, use o seletor no canto superior direito para alternar entre as empresas às quais seu usuário pertence.
+
+---
+
+## Seleção de Empresa
+
+Após o login, o cabeçalho exibe o nome da empresa ativa. Caso o usuário participe de mais de uma empresa, utilize o seletor “Empresa” (ao lado da busca global) para alternar entre elas. A troca atualiza automaticamente dashboards, projetos, notificações e relatórios para o contexto escolhido.
 
 ---
 
@@ -499,6 +511,65 @@ No topo da página, você pode escolher como agrupar os dados:
 - **Variação:** Diferença entre real e planejado
 - **Tarefas:** Quantidade de tarefas no grupo
 
+> 💡 **Dica:** Utilize o filtro por período para comparar diferentes janelas de tempo e identificar tendências.
+
+---
+
+## Dashboard Analítico
+
+O **Dashboard Analítico** traz uma visão avançada de produtividade, custos e qualidade.
+
+1. No menu principal, acesse **Analytics**
+2. Use os filtros superiores para selecionar **Projeto**, **Data inicial** e **Data final**
+3. Analise os blocos de métricas gerais (tarefas concluídas, eficiência, velocity)
+4. Explore os gráficos:
+   - **Distribuição por Status** (pizza)
+   - **Evolução por Sprint** (área)
+   - **Horas por Projeto** (barras empilhadas)
+   - **Performance por Membro** (radar)
+   - **Tendência de Custos** (linhas)
+5. Compare projetos usando a aba **Compare Projects**
+
+> 📌 **Dica:** ideal para reuniões de acompanhamento e para identificar gargalos de entrega.
+
+---
+
+## Calendário e iCal
+
+Gerencie compromissos de tarefas e sprints em um calendário integrado.
+
+### Visualização
+- Acesse qualquer projeto e clique em **Calendário**
+- Alterne entre **Mês**, **Semana**, **Dia** ou **Agenda**
+- Cores indicam status das tarefas e sprints
+
+### Exportar
+1. Clique em **Exportar Tarefas** ou **Exportar Sprints**
+2. Um arquivo `.ics` será baixado automaticamente
+3. Importe o arquivo em Google Calendar, Outlook ou Apple Calendar
+
+### Importar
+1. Clique em **Importar iCal**
+2. Selecione um arquivo `.ics`
+3. As tarefas são criadas automaticamente e o calendário é recarregado
+
+> ❗ **Importante:** apenas eventos com título e data são convertidos em tarefas. Cada importação atribui as tarefas ao usuário logado.
+
+---
+
+## Webhooks
+
+Os webhooks permitem integrar o Agile PM com outros sistemas.
+
+1. Abra o menu superior (ícone de sino) e clique em **Webhooks**
+2. Utilize o botão **+ Novo Webhook** para criar integrações
+   - Informe a URL, eventos de interesse e (opcional) um secret para HMAC
+   - Escolha entre webhook global ou associado a um projeto
+3. Acompanhe as entregas clicando em **Logs**
+4. Edite ou desative webhooks quando necessário
+
+> 📚 **Tip:** consulte `/api-docs` para detalhes técnicos de cada evento disponível.
+
 ---
 
 ## Gerenciamento de Usuários
@@ -601,6 +672,15 @@ Esta funcionalidade permite controlar quais usuários têm acesso a quais projet
 
 - **Tamanho Máximo:** Tamanho máximo permitido para uploads
 - **Tipos Permitidos:** Extensões de arquivo permitidas
+
+#### Alertas Inteligentes
+
+- **Badges e Critérios:** Ative ou desative alertas para prazos, tarefas bloqueadas e horas excedidas.
+- **Notificações:** Escolha se os alertas geram notificações e sons.
+- **Limiares:** Ajuste dias de antecedência para prazos e percentuais para sobrecarga.
+- **Resumo Diário:** Opcionalmente receba um email com o resumo dos alertas.
+
+> ✅ **Dica:** personalize por equipe para evitar ruído excessivo.
 
 ### Permissões
 

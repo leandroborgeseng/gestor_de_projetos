@@ -1,0 +1,28 @@
+{
+  "companies": [
+    {
+      "name": "Empresa Alpha",
+      "slug": "empresa-alpha",
+      "plan": "PRO",
+      "isActive": true,
+      "projectIds": ["proj_123", "proj_456"],
+      "users": [
+        { "userId": "user_admin_alpha", "role": "OWNER", "makeActive": true },
+        { "userId": "user_member_alpha", "role": "MEMBER" }
+      ],
+      "resourceIds": ["resource_alpha_1"],
+      "templateIds": ["template_alpha"],
+      "detachFromDefault": true
+    },
+    {
+      "name": "Empresa Beta",
+      "slug": "empresa-beta",
+      "plan": "FREE",
+      "projectIds": ["proj_789"],
+      "users": [
+        { "userId": "user_owner_beta", "role": "OWNER" },
+        { "userId": "user_member_beta" }
+      ]
+    }
+  ]
+}

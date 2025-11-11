@@ -16,13 +16,38 @@ function taskCost(t: any): number {
   return hours * effectiveRate(t);
 }
 
+function getCompanyOrReject(req: Request, res: Response): string | null {
+  const companyId = req.companyId;
+  if (!companyId) {
+    res.status(400).json({ error: "Empresa não selecionada" });
+    return null;
+  }
+  return companyId;
+}
+
+async function ensureProjectInCompany(projectId: string, companyId: string) {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, companyId },
+    select: { id: true },
+  });
+
+  if (!project) {
+    throw Object.assign(new Error("Projeto não encontrado"), { statusCode: 404 });
+  }
+}
+
 export async function financialSummary(req: Request, res: Response) {
   try {
+    const companyId = getCompanyOrReject(req, res);
+    if (!companyId) return;
+
     const { id: projectId } = req.params;
     const { groupBy = "sprint" } = req.query as { groupBy?: string };
 
+    await ensureProjectInCompany(projectId, companyId);
+
     const tasks = await prisma.task.findMany({
-      where: { projectId },
+      where: { projectId, project: { companyId } },
       include: {
         assignee: true,
         sprint: true,
@@ -46,7 +71,6 @@ export async function financialSummary(req: Request, res: Response) {
       } else if (groupBy === "status") {
         key = t.status;
       } else {
-        // sprint (default)
         key = t.sprint ? t.sprint.name : "No Sprint";
       }
 
@@ -71,16 +95,24 @@ export async function financialSummary(req: Request, res: Response) {
 
     res.json(result);
   } catch (error) {
+    if ((error as any).statusCode) {
+      return res.status((error as any).statusCode).json({ error: (error as Error).message });
+    }
     handleError(error, res);
   }
 }
 
 export async function ganttData(req: Request, res: Response) {
   try {
+    const companyId = getCompanyOrReject(req, res);
+    if (!companyId) return;
+
     const { id: projectId } = req.params;
 
+    await ensureProjectInCompany(projectId, companyId);
+
     const tasks = await prisma.task.findMany({
-      where: { projectId },
+      where: { projectId, project: { companyId } },
       include: {
         assignee: {
           select: { id: true, name: true },
@@ -112,6 +144,9 @@ export async function ganttData(req: Request, res: Response) {
 
     res.json(ganttItems);
   } catch (error) {
+    if ((error as any).statusCode) {
+      return res.status((error as any).statusCode).json({ error: (error as Error).message });
+    }
     handleError(error, res);
   }
 }

@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
+import { useHotkeys } from "react-hotkeys-hook";
 import * as v from "valibot";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../lib/axios.js";
+import TagSelector from "./TagSelector.js";
 
 interface CreateTaskModalProps {
   projectId: string;
@@ -64,6 +67,28 @@ export default function CreateTaskModal({
     enabled: !!projectId,
   });
 
+  // Atalho Ctrl+S para salvar
+  useHotkeys(
+    "ctrl+s, cmd+s",
+    (e) => {
+      e.preventDefault();
+      handleSubmit(onSubmit)();
+    },
+    { enabled: isOpen }
+  );
+
+  // Atalho Esc para fechar
+  useHotkeys(
+    "escape",
+    (e) => {
+      if (isOpen) {
+        e.preventDefault();
+        onClose();
+      }
+    },
+    { enabled: isOpen }
+  );
+
   const onSubmit = async (data: TaskFormData) => {
     try {
       const submitData: any = {
@@ -95,9 +120,23 @@ export default function CreateTaskModal({
         submitData.sprintId = data.sprintId;
       }
 
-      await api.post(`/projects/${projectId}/tasks`, submitData);
+      const response = await api.post(`/projects/${projectId}/tasks`, submitData);
+      const newTask = response.data;
+      
+      // Adicionar tags selecionadas à tarefa criada
+      if (selectedTagIds.length > 0 && newTask.id) {
+        for (const tagId of selectedTagIds) {
+          try {
+            await api.post(`/tags/tasks/${newTask.id}`, { tagId });
+          } catch (error) {
+            console.error(`Erro ao adicionar tag ${tagId}:`, error);
+          }
+        }
+      }
       
       reset();
+      setSelectedTagIds([]);
+      setCreatedTaskId(null);
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -299,6 +338,20 @@ export default function CreateTaskModal({
               {errors.dueDate && (
                 <p className="mt-1 text-sm text-red-400">{errors.dueDate.message}</p>
               )}
+            </div>
+          </div>
+
+          {/* Seção de Tags (pré-seleção antes de criar) */}
+          <div className="pt-4 border-t border-gray-700">
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-gray-300">Tags (opcional)</label>
+              <TagSelector
+                projectId={projectId}
+                taskId="temp"
+                selectedTagIds={selectedTagIds}
+                onTagsChange={setSelectedTagIds}
+                preSelectMode={true}
+              />
             </div>
           </div>
 

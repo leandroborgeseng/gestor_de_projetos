@@ -3,6 +3,10 @@ import { prisma } from "../../db/prisma.js";
 import { CreateProjectSchema, UpdateProjectSchema } from "./project.model.js";
 import { handleError } from "../../utils/errors.js";
 import { getPaginationParams } from "../../utils/pagination.js";
+import { logCreate, logUpdate, logDelete } from "../../services/activityLogger.js";
+import { notifyProjectUpdated } from "../../services/notificationService.js";
+import { triggerWebhooks } from "../../services/webhookService.js";
+import { WEBHOOK_EVENTS } from "../webhooks/webhook.model.js";
 
 function effectiveRate(t: any): number {
   if (t.hourlyRateOverride) return Number(t.hourlyRateOverride);
@@ -19,21 +23,27 @@ function taskCost(t: any): number {
 
 export async function getProjects(req: Request, res: Response) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
     const { skip, take, page, limit } = getPaginationParams(req.query);
     const { q, archived } = req.query as { q?: string; archived?: string };
 
     const where: any = {};
+    where.companyId = companyId;
     
     // Filtrar por busca
     if (q) {
       where.name = { contains: q, mode: "insensitive" as const };
     }
 
-    // Filtrar por arquivado (por padrão, mostrar apenas não arquivados)
-    // Se archived=true, mostrar apenas arquivados
-    // Se archived=false ou não especificado, mostrar apenas não arquivados
+    // Filtrar por arquivado (por padrão, mostrar apenas não arquivados ou registros antigos sem flag)
     if (archived === "true") {
       where.archived = true;
+    } else if (archived === "false") {
+      where.archived = false;
     } else {
       where.archived = false;
     }
@@ -69,17 +79,26 @@ export async function getProjects(req: Request, res: Response) {
 
 export async function getProjectsSummary(req: Request, res: Response) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
     const { q, assigneeId } = req.query as { q?: string; assigneeId?: string };
 
     // Construir filtros
     const projectWhere: any = {
-      archived: false, // Por padrão, apenas projetos não arquivados
+      companyId,
+      archived: false,
     };
     if (q) {
-      projectWhere.OR = [
-        { name: { contains: q, mode: "insensitive" as const } },
-        { description: { contains: q, mode: "insensitive" as const } },
-      ];
+      projectWhere.AND = projectWhere.AND || [];
+      projectWhere.AND.push({
+        OR: [
+          { name: { contains: q, mode: "insensitive" as const } },
+          { description: { contains: q, mode: "insensitive" as const } },
+        ],
+      });
     }
 
     const projects = await prisma.project.findMany({
@@ -103,9 +122,11 @@ export async function getProjectsSummary(req: Request, res: Response) {
       orderBy: { createdAt: "desc" },
     });
 
+    console.log(`[getProjectsSummary] Encontrados ${projects.length} projetos (filtro: archived=false, assigneeId=${assigneeId || 'nenhum'}, q=${q || 'nenhuma'})`);
+
     const summaries = projects.map((project) => {
       // Filtrar tarefas se necessário
-      let tasks = project.tasks;
+      let tasks = project.tasks || [];
       
       // Se tiver busca, filtrar tarefas também
       if (q) {
@@ -176,15 +197,22 @@ export async function getProjectsSummary(req: Request, res: Response) {
     });
 
     // Filtrar projetos que não têm tarefas após busca em tarefas
+    // Quando assigneeId é usado, mostrar apenas projetos com tarefas atribuídas ao usuário
     const filteredSummaries = summaries.filter((summary) => {
+      // Se há busca por texto, mostrar projetos mesmo sem tarefas (o projeto pode corresponder à busca)
       if (q && summary.totalTasks === 0) {
-        // Se busca está ativa e não tem tarefas, ainda mostrar se o projeto corresponde à busca
         return true;
       }
+      // Se há filtro por assigneeId, mostrar apenas projetos com tarefas atribuídas
+      if (assigneeId && summary.totalTasks === 0) {
+        return false;
+      }
+      // Caso contrário, mostrar todos os projetos (mesmo sem tarefas)
       return true;
     });
 
-    res.json(filteredSummaries);
+    // Garantir que sempre retornamos um array
+    res.json(Array.isArray(filteredSummaries) ? filteredSummaries : []);
   } catch (error) {
     handleError(error, res);
   }
@@ -192,6 +220,11 @@ export async function getProjectsSummary(req: Request, res: Response) {
 
 export async function searchAll(req: Request, res: Response) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
     const { q, assigneeId, type } = req.query as { 
       q?: string; 
       assigneeId?: string;
@@ -206,13 +239,17 @@ export async function searchAll(req: Request, res: Response) {
 
     if (searchType === "projects" || searchType === "all") {
       const projectWhere: any = {
-        archived: false, // Apenas projetos não arquivados na busca geral
+        OR: [{ archived: false }, { archived: null }], // Incluir projetos antigos sem flag
       };
+      projectWhere.companyId = companyId;
       if (q) {
-        projectWhere.OR = [
-          { name: { contains: q, mode: "insensitive" as const } },
-          { description: { contains: q, mode: "insensitive" as const } },
-        ];
+        projectWhere.AND = projectWhere.AND || [];
+        projectWhere.AND.push({
+          OR: [
+            { name: { contains: q, mode: "insensitive" as const } },
+            { description: { contains: q, mode: "insensitive" as const } },
+          ],
+        });
       }
 
       const projects = await prisma.project.findMany({
@@ -241,6 +278,8 @@ export async function searchAll(req: Request, res: Response) {
       if (assigneeId) {
         taskWhere.assigneeId = assigneeId;
       }
+
+      taskWhere.project = { companyId };
 
       const tasks = await prisma.task.findMany({
         where: taskWhere,
@@ -271,6 +310,11 @@ export async function searchAll(req: Request, res: Response) {
 // Buscar tarefas por status em todos os projetos
 export async function getTasksByStatus(req: Request, res: Response) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
     const { status, assigneeId } = req.query as { status?: string; assigneeId?: string };
 
     if (!status) {
@@ -278,8 +322,8 @@ export async function getTasksByStatus(req: Request, res: Response) {
     }
 
     const where: any = {
-      status: status as any,
-      parentId: null, // Apenas tarefas principais
+      companyId,
+      archived: false,
     };
 
     // Filtrar por assignee se fornecido
@@ -314,6 +358,11 @@ export async function getTasksByStatus(req: Request, res: Response) {
 
 export async function createProject(req: Request, res: Response) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
     const parse = CreateProjectSchema.safeParse(req.body);
     if (!parse.success) {
       return res.status(400).json({ error: parse.error.flatten() });
@@ -327,6 +376,7 @@ export async function createProject(req: Request, res: Response) {
     const project = await prisma.project.create({
       data: {
         ...parse.data,
+        companyId,
         ownerId: userId,
         columns: {
           create: [
@@ -345,6 +395,14 @@ export async function createProject(req: Request, res: Response) {
       },
     });
 
+    // Log da criação
+    if (userId) {
+      logCreate(userId, companyId, "Project", project.id, project).catch(console.error);
+    }
+
+    // Disparar webhook
+    triggerWebhooks(WEBHOOK_EVENTS.PROJECT_CREATED, project, project.id).catch(console.error);
+
     res.status(201).json(project);
   } catch (error) {
     handleError(error, res);
@@ -353,8 +411,13 @@ export async function createProject(req: Request, res: Response) {
 
 export async function getProject(req: Request, res: Response) {
   try {
-    const project = await prisma.project.findUnique({
-      where: { id: req.params.id },
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
+    const project = await prisma.project.findFirst({
+      where: { id: req.params.id, companyId },
       include: {
         owner: {
           select: { id: true, name: true, email: true },
@@ -380,9 +443,23 @@ export async function getProject(req: Request, res: Response) {
 
 export async function updateProject(req: Request, res: Response) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
     const parse = UpdateProjectSchema.safeParse(req.body);
     if (!parse.success) {
       return res.status(400).json({ error: parse.error.flatten() });
+    }
+
+    // Buscar projeto antigo para comparar mudanças
+    const oldProject = await prisma.project.findFirst({
+      where: { id: req.params.id, companyId },
+    });
+
+    if (!oldProject) {
+      return res.status(404).json({ error: "Project not found" });
     }
 
     const project = await prisma.project.update({
@@ -395,6 +472,18 @@ export async function updateProject(req: Request, res: Response) {
       },
     });
 
+    // Log da atualização
+    const userId = req.user?.userId;
+    if (userId) {
+      logUpdate(userId, companyId, "Project", project.id, oldProject, project).catch(console.error);
+      
+      // Notificar atualização aos membros do projeto
+      notifyProjectUpdated(project.id, project.name, userId).catch(console.error);
+    }
+
+    // Disparar webhook
+    triggerWebhooks(WEBHOOK_EVENTS.PROJECT_UPDATED, project, project.id).catch(console.error);
+
     res.json(project);
   } catch (error) {
     handleError(error, res);
@@ -403,7 +492,30 @@ export async function updateProject(req: Request, res: Response) {
 
 export async function deleteProject(req: Request, res: Response) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
+    // Buscar projeto antes de deletar para webhook
+    const project = await prisma.project.findFirst({
+      where: { id: req.params.id, companyId },
+      include: {
+        owner: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: "Projeto não encontrado" });
+    }
+
     await prisma.project.delete({ where: { id: req.params.id } });
+
+    // Disparar webhook
+    triggerWebhooks(WEBHOOK_EVENTS.PROJECT_DELETED, project, project.id).catch(console.error);
+
     res.status(204).send();
   } catch (error) {
     handleError(error, res);
@@ -413,6 +525,19 @@ export async function deleteProject(req: Request, res: Response) {
 // Arquivar projeto
 export async function archiveProject(req: Request, res: Response) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
+    const existing = await prisma.project.findFirst({
+      where: { id: req.params.id, companyId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: "Projeto não encontrado" });
+    }
+
     const project = await prisma.project.update({
       where: { id: req.params.id },
       data: { archived: true },
@@ -423,6 +548,9 @@ export async function archiveProject(req: Request, res: Response) {
       },
     });
 
+    // Disparar webhook
+    triggerWebhooks(WEBHOOK_EVENTS.PROJECT_ARCHIVED, project, project.id).catch(console.error);
+
     res.json(project);
   } catch (error) {
     handleError(error, res);
@@ -432,6 +560,19 @@ export async function archiveProject(req: Request, res: Response) {
 // Desarquivar projeto
 export async function unarchiveProject(req: Request, res: Response) {
   try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
+    const existing = await prisma.project.findFirst({
+      where: { id: req.params.id, companyId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: "Projeto não encontrado" });
+    }
+
     const project = await prisma.project.update({
       where: { id: req.params.id },
       data: { archived: false },
@@ -443,6 +584,211 @@ export async function unarchiveProject(req: Request, res: Response) {
     });
 
     res.json(project);
+  } catch (error) {
+    handleError(error, res);
+  }
+}
+
+/**
+ * Clona um projeto
+ */
+export async function cloneProject(req: Request, res: Response) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
+    const { id } = req.params;
+    const {
+      name,
+      includeTasks = true,
+      includeMembers = true,
+      includeSprints = true,
+      includeColumns = true,
+    } = req.body as {
+      name?: string;
+      includeTasks?: boolean;
+      includeMembers?: boolean;
+      includeSprints?: boolean;
+      includeColumns?: boolean;
+    };
+
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: "Não autenticado" });
+    }
+
+    // Buscar projeto original
+    const originalProject = await prisma.project.findFirst({
+      where: { id, companyId },
+      include: {
+        columns: {
+          orderBy: { order: "asc" },
+        },
+        tasks: includeTasks
+          ? {
+              include: {
+                tags: {
+                  include: { tag: true },
+                },
+              },
+              orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+            }
+          : false,
+        sprints: includeSprints
+          ? {
+              include: {
+                tasks: includeTasks,
+              },
+              orderBy: { startDate: "asc" },
+            }
+          : false,
+        members: includeMembers
+          ? {
+              include: {
+                user: {
+                  select: { id: true, name: true, email: true },
+                },
+              },
+            }
+          : false,
+      },
+    });
+
+    if (!originalProject) {
+      return res.status(404).json({ error: "Projeto não encontrado" });
+    }
+
+    // Criar novo projeto
+    const newProjectName = name || `${originalProject.name} (Cópia)`;
+    const newProject = await prisma.project.create({
+      data: {
+        companyId,
+        name: newProjectName,
+        description: originalProject.description || undefined,
+        defaultHourlyRate: originalProject.defaultHourlyRate,
+        ownerId: userId,
+        archived: false,
+      },
+    });
+
+    // Clonar colunas
+    if (includeColumns && originalProject.columns) {
+      await prisma.kanbanColumn.createMany({
+        data: originalProject.columns.map((col) => ({
+          projectId: newProject.id,
+          title: col.title,
+          status: col.status,
+          order: col.order,
+        })),
+      });
+    }
+
+    // Mapear sprints antigas para novas
+    const sprintMap = new Map<string, string>();
+    if (includeSprints && originalProject.sprints) {
+      for (const sprint of originalProject.sprints) {
+        const newSprint = await prisma.sprint.create({
+          data: {
+            projectId: newProject.id,
+            name: sprint.name,
+            goal: sprint.goal || undefined,
+            startDate: sprint.startDate,
+            endDate: sprint.endDate,
+          },
+        });
+        sprintMap.set(sprint.id, newSprint.id);
+      }
+    }
+
+    // Clonar tarefas
+    if (includeTasks && originalProject.tasks) {
+      for (const task of originalProject.tasks) {
+        const newTask = await prisma.task.create({
+          data: {
+            projectId: newProject.id,
+            title: task.title,
+            description: task.description || undefined,
+            status: task.status,
+            estimateHours: task.estimateHours,
+            actualHours: 0, // Resetar horas reais
+            order: task.order,
+            sprintId: task.sprintId && sprintMap.has(task.sprintId)
+              ? sprintMap.get(task.sprintId) || undefined
+              : undefined,
+            // Não clonar assignee, parentId, dependências, etc. por padrão
+          },
+        });
+
+        // Clonar tags da tarefa
+        if (task.tags && task.tags.length > 0) {
+          for (const taskTag of task.tags) {
+            // Verificar se a tag existe no novo projeto ou criar
+            let tag = await prisma.tag.findFirst({
+              where: {
+                name: taskTag.tag.name,
+                projectId: newProject.id,
+                companyId,
+              },
+            });
+
+            if (!tag) {
+              tag = await prisma.tag.create({
+                data: {
+                  name: taskTag.tag.name,
+                  color: taskTag.tag.color,
+                  projectId: newProject.id,
+                  companyId,
+                },
+              });
+            }
+
+            await prisma.taskTag.create({
+              data: {
+                taskId: newTask.id,
+                tagId: tag.id,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    // Clonar membros
+    if (includeMembers && originalProject.members) {
+      for (const member of originalProject.members) {
+        await prisma.projectMember.create({
+          data: {
+            projectId: newProject.id,
+            userId: member.userId,
+            role: member.role,
+          },
+        });
+      }
+    }
+
+    // Buscar projeto clonado completo
+    const clonedProject = await prisma.project.findUnique({
+      where: { id: newProject.id },
+      include: {
+        owner: {
+          select: { id: true, name: true, email: true },
+        },
+        columns: true,
+        tasks: true,
+        sprints: true,
+        members: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        },
+      },
+    });
+
+    res.status(201).json(clonedProject);
   } catch (error) {
     handleError(error, res);
   }

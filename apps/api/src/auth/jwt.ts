@@ -1,10 +1,17 @@
 import jwt from "jsonwebtoken";
 import { env } from "../env.js";
 
+export interface TokenCompany {
+  companyId: string;
+  role: string;
+}
+
 export interface TokenPayload {
   userId: string;
   email: string;
   role: string;
+  companies: TokenCompany[];
+  activeCompanyId?: string;
 }
 
 export function generateAccessToken(payload: TokenPayload): string {

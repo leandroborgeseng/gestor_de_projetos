@@ -12,7 +12,7 @@ export const UpdateSettingsSchema = z.object({
 });
 
 export const UpdatePermissionSchema = z.object({
-  role: z.enum(["ADMIN", "MANAGER", "MEMBER"]),
+  role: z.enum(["SUPERADMIN", "ADMIN", "MANAGER", "MEMBER"]),
   resource: z.string().min(1),
   action: z.string().min(1),
   allowed: z.boolean(),

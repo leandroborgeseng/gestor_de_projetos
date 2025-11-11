@@ -3,6 +3,30 @@ import { useParams } from "react-router-dom";
 import { useState } from "react";
 import api from "../lib/axios.js";
 
+const handleExport = async (projectId: string, format: "excel" | "csv", groupBy: string) => {
+  try {
+    const url = `/projects/${projectId}/export/financial/${format}?groupBy=${groupBy}`;
+    const response = await api.get(url, {
+      responseType: "blob",
+    });
+
+    const blob = new Blob([response.data]);
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    
+    const extension = format === "excel" ? "xlsx" : "csv";
+    link.download = `relatorio-financeiro-${new Date().toISOString().split("T")[0]}.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    console.error("Erro ao exportar:", error);
+    alert("Erro ao exportar relatório. Tente novamente.");
+  }
+};
+
 export default function ReportsFinancial() {
   const { id } = useParams<{ id: string }>();
   const [groupBy, setGroupBy] = useState("sprint");
@@ -35,7 +59,7 @@ export default function ReportsFinancial() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-100">Resumo Financeiro</h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <select
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value)}
@@ -46,6 +70,30 @@ export default function ReportsFinancial() {
             <option value="resource">Por Recurso</option>
             <option value="status">Por Status</option>
           </select>
+          {id && (
+            <>
+              <button
+                onClick={() => handleExport(id, "excel", groupBy)}
+                className="px-4 py-2 bg-green-700 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center gap-2"
+                title="Exportar para Excel"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Excel
+              </button>
+              <button
+                onClick={() => handleExport(id, "csv", groupBy)}
+                className="px-4 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2"
+                title="Exportar para CSV"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                CSV
+              </button>
+            </>
+          )}
         </div>
       </div>
 

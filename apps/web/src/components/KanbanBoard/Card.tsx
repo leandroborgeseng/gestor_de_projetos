@@ -1,4 +1,8 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { useQuery } from "@tanstack/react-query";
+import TaskTimer from "../TaskTimer.js";
+import AlertBadge from "../AlertBadge.js";
+import api from "../../lib/axios.js";
 
 interface Task {
   id: string;
@@ -14,6 +18,7 @@ interface Task {
   startDate?: string;
   dueDate?: string;
   subtasks?: Task[];
+  tags?: Array<{ id: string; tag: { id: string; name: string; color: string } }>;
 }
 
 interface CardProps {
@@ -31,6 +36,17 @@ export default function Card({ task, isDragging, isDragOver, onEdit }: CardProps
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: task.id,
   });
+
+  // Buscar alertas relacionados a esta tarefa
+  const { data: alertsData } = useQuery<{ alerts: any[] }>({
+    queryKey: ["alerts"],
+    queryFn: () => api.get("/alerts").then((res) => res.data),
+    staleTime: 30000, // Cache por 30 segundos
+  });
+
+  const taskAlerts = alertsData?.alerts?.filter(
+    (alert) => alert.entityType === "Task" && alert.entityId === task.id
+  ) || [];
 
   // Combinar refs
   const combinedRef = (node: HTMLElement | null) => {
@@ -55,20 +71,40 @@ export default function Card({ task, isDragging, isDragOver, onEdit }: CardProps
     <div
       ref={combinedRef}
       style={style}
-      className={`bg-gray-700 rounded-lg shadow-md p-4 hover:shadow-lg transition-all ${
+      className={`bg-gray-700 rounded-lg shadow-md density-padding hover:shadow-lg transition-all ${
         isDragging ? "opacity-50" : ""
       } ${
         (isDragOver || isOver) ? "ring-2 ring-indigo-400 ring-offset-2 ring-offset-gray-800 bg-indigo-900/20" : ""
       }`}
     >
       <div className="flex justify-between items-start mb-2">
-        <h4
-          {...listeners}
-          {...attributes}
-          className="font-medium text-gray-100 flex-1 cursor-move"
-        >
-          {task.title}
-        </h4>
+        <div className="flex-1">
+          <h4
+            {...listeners}
+            {...attributes}
+            className="font-medium text-gray-100 cursor-move density-text-sm"
+          >
+            {task.title}
+          </h4>
+          {/* Alertas */}
+          {taskAlerts.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {taskAlerts.slice(0, 2).map((alert) => (
+                <AlertBadge
+                  key={alert.id}
+                  type={alert.type}
+                  severity={alert.severity}
+                  title={alert.message}
+                />
+              ))}
+              {taskAlerts.length > 2 && (
+                <span className="px-1.5 py-0.5 text-xs text-gray-400">
+                  +{taskAlerts.length - 2}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
         {onEdit && (
           <button
             onClick={handleEditClick}
@@ -96,11 +132,35 @@ export default function Card({ task, isDragging, isDragOver, onEdit }: CardProps
         <p
           {...listeners}
           {...attributes}
-          className="text-sm text-gray-400 mb-2 line-clamp-2 cursor-move"
+          className="text-gray-400 mb-2 line-clamp-2 cursor-move density-text-xs"
         >
           {task.description}
         </p>
       )}
+      {/* Tags */}
+      {task.tags && task.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {task.tags.slice(0, 3).map((taskTag) => (
+            <span
+              key={taskTag.tag.id}
+              className="px-1.5 py-0.5 text-xs rounded-md font-medium"
+              style={{
+                backgroundColor: `${taskTag.tag.color}40`,
+                color: taskTag.tag.color,
+              }}
+              title={taskTag.tag.name}
+            >
+              {taskTag.tag.name}
+            </span>
+          ))}
+          {task.tags.length > 3 && (
+            <span className="px-1.5 py-0.5 text-xs text-gray-400">
+              +{task.tags.length - 3}
+            </span>
+          )}
+        </div>
+      )}
+
       <div
         {...listeners}
         {...attributes}
@@ -137,6 +197,11 @@ export default function Card({ task, isDragging, isDragOver, onEdit }: CardProps
         {task.estimateHours && (
           <span>{task.estimateHours.toFixed(1)}h</span>
         )}
+      </div>
+      
+      {/* Timer */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <TaskTimer taskId={task.id} taskTitle={task.title} compact />
       </div>
     </div>
   );

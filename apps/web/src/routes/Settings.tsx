@@ -44,6 +44,7 @@ const ACTIONS = [
 ];
 
 const ROLES = [
+  { id: "SUPERADMIN", label: "Super Admin" },
   { id: "ADMIN", label: "Administrador" },
   { id: "MANAGER", label: "Gerente" },
   { id: "MEMBER", label: "Membro" },
@@ -52,9 +53,9 @@ const ROLES = [
 export default function Settings() {
   const queryClient = useQueryClient();
   const currentUser = getCurrentUser();
-  const isAdmin = currentUser?.role === "ADMIN";
+  const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPERADMIN";
 
-  const [activeTab, setActiveTab] = useState<"general" | "permissions">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "permissions" | "alerts">("general");
   const [settings, setSettings] = useState<SettingsData>({
     emailHost: "",
     emailPort: 587,
@@ -67,11 +68,27 @@ export default function Settings() {
   });
 
   const [permissions, setPermissions] = useState<PermissionsData>({});
+  const [alertConfig, setAlertConfig] = useState({
+    taskDueSoonDays: 3,
+    projectInactiveDays: 7,
+    hoursOverestimateThreshold: 1.5,
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["settings"],
     queryFn: () => api.get("/settings").then((res) => res.data),
   });
+
+  const { data: alertConfigData } = useQuery({
+    queryKey: ["alert-config"],
+    queryFn: () => api.get("/alerts/config").then((res) => res.data),
+  });
+
+  useEffect(() => {
+    if (alertConfigData?.config) {
+      setAlertConfig(alertConfigData.config);
+    }
+  }, [alertConfigData]);
 
   useEffect(() => {
     if (data) {
@@ -99,6 +116,18 @@ export default function Settings() {
     },
     onError: (err: any) => {
       alert(err.response?.data?.error || "Erro ao salvar permissões");
+    },
+  });
+
+  const updateAlertConfigMutation = useMutation({
+    mutationFn: (config: any) => api.put("/alerts/config", config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["alert-config"] });
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
+      alert("Configurações de alertas salvas com sucesso!");
+    },
+    onError: (err: any) => {
+      alert(err.response?.data?.error || "Erro ao salvar configurações de alertas");
     },
   });
 
@@ -161,7 +190,7 @@ export default function Settings() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-gray-900">
+      <div className="min-h-screen bg-surface text-primary transition-colors duration-200">
         <Navbar />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="bg-red-900/20 border border-red-700 rounded-lg p-6 text-center">
@@ -176,7 +205,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-surface text-primary transition-colors duration-200">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-between items-center mb-6">
@@ -211,6 +240,16 @@ export default function Settings() {
               }`}
             >
               Permissões
+            </button>
+            <button
+              onClick={() => setActiveTab("alerts")}
+              className={`pb-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "alerts"
+                  ? "border-indigo-400 text-indigo-400"
+                  : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600"
+              }`}
+            >
+              Alertas
             </button>
           </div>
         </div>
@@ -416,6 +455,101 @@ export default function Settings() {
                     className="px-6 py-2 bg-indigo-700 text-white rounded-md hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {updatePermissionsMutation.isPending ? "Salvando..." : "Salvar Permissões"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Configurações de Alertas */}
+            {activeTab === "alerts" && (
+              <div className="bg-gray-800 rounded-lg shadow p-6 space-y-6">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-100 mb-4">
+                    Configurações de Alertas
+                  </h2>
+                  <p className="text-sm text-gray-400 mb-6">
+                    Configure quando você deseja ser alertado sobre tarefas, projetos e horas trabalhadas.
+                  </p>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Dias antes do prazo para alertar (Tarefas próximas do prazo)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={alertConfig.taskDueSoonDays}
+                        onChange={(e) =>
+                          setAlertConfig({
+                            ...alertConfig,
+                            taskDueSoonDays: parseInt(e.target.value) || 3,
+                          })
+                        }
+                        className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Você será alertado quando uma tarefa estiver próxima do prazo (padrão: 3 dias)
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Dias sem atividade para considerar projeto inativo
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="90"
+                        value={alertConfig.projectInactiveDays}
+                        onChange={(e) =>
+                          setAlertConfig({
+                            ...alertConfig,
+                            projectInactiveDays: parseInt(e.target.value) || 7,
+                          })
+                        }
+                        className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Você será alertado quando um projeto não tiver atividade há X dias (padrão: 7 dias)
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Limite de sobreestimação de horas (multiplicador)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="5"
+                        step="0.1"
+                        value={alertConfig.hoursOverestimateThreshold}
+                        onChange={(e) =>
+                          setAlertConfig({
+                            ...alertConfig,
+                            hoursOverestimateThreshold: parseFloat(e.target.value) || 1.5,
+                          })
+                        }
+                        className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Você será alertado quando as horas reais ultrapassarem este multiplicador das horas estimadas (padrão: 1.5 = 50% acima)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t border-gray-700">
+                  <button
+                    onClick={() => updateAlertConfigMutation.mutate(alertConfig)}
+                    disabled={updateAlertConfigMutation.isPending}
+                    className="px-6 py-2 bg-indigo-700 text-white rounded-md hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {updateAlertConfigMutation.isPending
+                      ? "Salvando..."
+                      : "Salvar Configurações de Alertas"}
                   </button>
                 </div>
               </div>

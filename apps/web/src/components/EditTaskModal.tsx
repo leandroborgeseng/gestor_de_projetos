@@ -1,10 +1,14 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
+import { useHotkeys } from "react-hotkeys-hook";
 import * as v from "valibot";
 import { useQuery } from "@tanstack/react-query";
 import api from "../lib/axios.js";
 import DependenciesManager from "./DependenciesManager.js";
+import FileAttachmentManager from "./FileAttachmentManager.js";
+import CommentThread from "./CommentThread.js";
+import TagSelector from "./TagSelector.js";
 
 interface Task {
   id: string;
@@ -19,6 +23,7 @@ interface Task {
   actualHours?: number;
   startDate?: string;
   dueDate?: string;
+  tags?: Array<{ id: string; tag: { id: string; name: string; color: string } }>;
 }
 
 interface EditTaskModalProps {
@@ -107,6 +112,28 @@ export default function EditTaskModal({
       });
     }
   }, [task, isOpen, reset]);
+
+  // Atalho Ctrl+S para salvar
+  useHotkeys(
+    "ctrl+s, cmd+s",
+    (e) => {
+      e.preventDefault();
+      handleSubmit(onSubmit)();
+    },
+    { enabled: isOpen && !!task }
+  );
+
+  // Atalho Esc para fechar
+  useHotkeys(
+    "escape",
+    (e) => {
+      if (isOpen) {
+        e.preventDefault();
+        onClose();
+      }
+    },
+    { enabled: isOpen }
+  );
 
   const onSubmit = async (data: TaskFormData) => {
     if (!task) return;
@@ -383,6 +410,31 @@ export default function EditTaskModal({
                 projectId={projectId}
                 allTasks={allTasks}
               />
+            </div>
+          )}
+
+          {/* Seção de Tags */}
+          {task && (
+            <div className="pt-4 border-t border-gray-700">
+              <TagSelector
+                projectId={projectId}
+                taskId={task.id}
+                selectedTagIds={task.tags?.map((t) => t.tag.id) || []}
+              />
+            </div>
+          )}
+
+          {/* Seção de Anexos */}
+          {task && (
+            <div className="pt-4 border-t border-gray-700">
+              <FileAttachmentManager taskId={task.id} />
+            </div>
+          )}
+
+          {/* Seção de Comentários */}
+          {task && (
+            <div className="pt-4 border-t border-gray-700">
+              <CommentThread taskId={task.id} />
             </div>
           )}
 
