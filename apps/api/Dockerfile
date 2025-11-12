@@ -32,12 +32,17 @@ COPY . .
 WORKDIR /app/apps/api
 
 # Verificar se os arquivos de configuração estão presentes
-RUN ls -la tsconfig*.json tsup.config.ts || echo "Arquivos de config não encontrados"
+RUN ls -la tsconfig*.json tsup.config.ts && \
+    echo "=== Conteúdo do tsup.config.ts ===" && \
+    cat tsup.config.ts && \
+    echo "=== Conteúdo do tsconfig.build.json ===" && \
+    cat tsconfig.build.json || echo "Arquivos não encontrados"
 
 # Gerar Prisma Client
 RUN pnpm prisma generate
 
-# Build da aplicação (sem tipos)
+# Build da aplicação (sem tipos) - usar variável de ambiente para garantir
+ENV TSX_DTS=false
 RUN pnpm build
 
 # Stage 3: Production
