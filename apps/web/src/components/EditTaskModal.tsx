@@ -14,16 +14,17 @@ interface Task {
   id: string;
   title: string;
   description?: string;
-  status: string;
+  status?: string;
   order?: number;
   assigneeId?: string;
   assignee?: { id?: string; name: string; email?: string };
   sprintId?: string;
-  sprint?: { id: string; name: string };
+  sprint?: { id?: string; name: string };
   estimateHours?: number;
   actualHours?: number;
   startDate?: string;
   dueDate?: string;
+  subtasks?: Task[];
   tags?: Array<{ id: string; tag: { id: string; name: string; color: string } }>;
 }
 
