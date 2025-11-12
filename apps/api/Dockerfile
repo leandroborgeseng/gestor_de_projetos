@@ -62,27 +62,24 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# SOLUÇÃO DEFINITIVA: Copiar os pacotes REAIS do .pnpm diretamente para /app/node_modules
-# Isso evita problemas com symlinks quebrados
+# SOLUÇÃO DEFINITIVA: Copiar o .pnpm primeiro, depois extrair os pacotes reais
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
+
+# Extrair pacotes reais do .pnpm para /app/node_modules
 RUN mkdir -p /app/node_modules && \
-    # Copiar pacotes de produção do .pnpm
-    if [ -d "/app/node_modules/.pnpm" ]; then \
-        echo "Copiando pacotes do .pnpm..."; \
-        cd /app/node_modules/.pnpm && \
-        for pkg_dir in */node_modules/*; do \
+    echo "Extraindo pacotes do .pnpm..." && \
+    cd /app/node_modules/.pnpm && \
+    for pkg_dir in */node_modules/*; do \
+        if [ -d "$pkg_dir" ]; then \
             pkg_name=$(basename "$pkg_dir"); \
             if [ "$pkg_name" != "node_modules" ] && [ ! -e "/app/node_modules/$pkg_name" ]; then \
                 cp -r "$pkg_dir" "/app/node_modules/$pkg_name" 2>/dev/null || true; \
             fi; \
-        done; \
-    fi
+        fi; \
+    done && \
+    echo "Pacotes extraídos"
 
-# Copiar estrutura completa do builder (incluindo .pnpm para referência)
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.modules.yaml ./node_modules/.modules.yaml
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm-workspace-state-v1.json ./node_modules/.pnpm-workspace-state-v1.json
-
-# Copiar diretórios com escopo do workspace
+# Copiar diretórios com escopo do workspace (onde estão os pacotes gerados como @prisma/client)
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules/@prisma ./node_modules/@prisma 2>/dev/null || true
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules/@types ./node_modules/@types 2>/dev/null || true
 
