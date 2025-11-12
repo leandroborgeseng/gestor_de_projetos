@@ -30,9 +30,14 @@ COPY . .
 
 # Gerar Prisma Client
 WORKDIR /app/apps/api
+
+# Verificar se os arquivos de configuração estão presentes
+RUN ls -la tsconfig*.json tsup.config.ts || echo "Arquivos de config não encontrados"
+
+# Gerar Prisma Client
 RUN pnpm prisma generate
 
-# Build da aplicação
+# Build da aplicação (sem tipos)
 RUN pnpm build
 
 # Stage 3: Production
