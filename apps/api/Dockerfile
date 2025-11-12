@@ -18,6 +18,10 @@ COPY apps/web/package.json ./apps/web/
 # Tenta com frozen-lockfile primeiro, se falhar atualiza o lockfile
 RUN pnpm install --frozen-lockfile || (echo "Lockfile desatualizado, atualizando..." && pnpm install)
 
+# Verificar se node_modules foi criado
+RUN ls -la /app/node_modules | head -10 || echo "node_modules não encontrado na raiz"
+RUN ls -la /app/apps/api/node_modules 2>/dev/null | head -10 || echo "node_modules não encontrado em apps/api"
+
 # Stage 2: Build
 FROM base AS builder
 WORKDIR /app
@@ -37,6 +41,9 @@ RUN pnpm prisma generate
 # Build da aplicação usando esbuild (não gera tipos)
 RUN pnpm build
 
+# Verificar se o build foi bem-sucedido
+RUN ls -la /app/apps/api/dist/ | head -10
+
 # Stage 3: Production
 FROM base AS runner
 WORKDIR /app
@@ -53,8 +60,11 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./package.json
 
 # Copiar node_modules da raiz (pnpm workspace coloca dependências aqui)
-# Esta é a estrutura que o Node.js procura quando executa de /app/dist/index.js
+# IMPORTANTE: Copiar com preservação de symlinks e estrutura completa
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+
+# Verificar se express está presente após copiar
+RUN ls -la /app/node_modules/express 2>/dev/null || echo "⚠️ express não encontrado em node_modules"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
