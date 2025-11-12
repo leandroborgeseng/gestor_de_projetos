@@ -19,11 +19,18 @@ interface Task {
   id: string;
   title: string;
   description?: string;
-  status: string;
+  status?: string;
   order?: number;
   assignee?: { id?: string; name: string; email?: string };
+  assigneeId?: string;
+  sprintId?: string;
+  sprint?: { id?: string; name: string };
   estimateHours?: number;
+  actualHours?: number;
+  startDate?: string;
+  dueDate?: string;
   subtasks?: Task[];
+  tags?: Array<{ id: string; tag: { id: string; name: string; color: string } }>;
 }
 
 interface BoardProps {
@@ -105,7 +112,8 @@ export default function Board({ columns, tasks, onMoveTask, onEditTask, onCreate
         {sortedColumns.map((column) => {
           const columnTasks = tasks
             .filter((t) => t.status === column.status)
-            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+            .map((t) => ({ ...t, status: column.status })); // Garantir que status está definido
 
           return (
             <Column
