@@ -2,7 +2,7 @@
 FROM node:20-alpine AS base
 
 # Instalar pnpm e dependências do Prisma
-RUN apk add --no-cache openssl1.1-compat && \
+RUN apk add --no-cache openssl openssl-dev && \
     npm install -g pnpm
 
 # Stage 1: Dependencies
