@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useHotkeys } from "react-hotkeys-hook";
 import * as v from "valibot";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import api from "../lib/axios.js";
 import TagSelector from "./TagSelector.js";
 
@@ -36,6 +36,8 @@ export default function CreateTaskModal({
   onClose,
   onSuccess,
 }: CreateTaskModalProps) {
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+
   const {
     register,
     handleSubmit,
@@ -136,7 +138,6 @@ export default function CreateTaskModal({
       
       reset();
       setSelectedTagIds([]);
-      setCreatedTaskId(null);
       onSuccess();
       onClose();
     } catch (err: any) {

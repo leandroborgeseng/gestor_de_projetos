@@ -493,7 +493,7 @@ export default function Analytics() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }: { name: string; percent: number }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -617,7 +617,6 @@ export default function Analytics() {
               {productivity.byMember.slice(0, 4).map((member: any, index: number) => {
                 const maxVelocity = Math.max(...productivity.byMember.map((m: any) => m.velocity || 0));
                 const maxHours = Math.max(...productivity.byMember.map((m: any) => m.plannedHours || 0));
-                const maxCompletion = 100;
 
                 const radarData = [
                   { subject: "Velocity", A: ((member.velocity || 0) / maxVelocity) * 100, fullMark: 100 },

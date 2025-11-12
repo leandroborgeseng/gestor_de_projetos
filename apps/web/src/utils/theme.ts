@@ -42,15 +42,6 @@ const DEFAULT_LIGHT_THEME: CompanyThemePalette = {
   secondaryContrast: "#1F2937",
 };
 
-const DEFAULT_THEME: CompanyThemeDefinition = {
-  dark: DEFAULT_DARK_THEME,
-  light: DEFAULT_LIGHT_THEME,
-  logos: {
-    dark: null,
-    light: null,
-  },
-};
-
 function ensureColor(value: string | undefined | null, fallback: string) {
   if (!value) return fallback;
   return value.trim() || fallback;

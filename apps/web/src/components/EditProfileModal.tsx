@@ -155,7 +155,7 @@ export default function EditProfileModal({ isOpen, onClose }: EditProfileModalPr
       // Forçar reload da página para atualizar o Navbar
       window.location.reload();
     },
-    onError: (err: any) => {
+    onError: () => {
       // Error handling será feito pelo setError do react-hook-form
     },
   });

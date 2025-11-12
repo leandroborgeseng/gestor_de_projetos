@@ -111,7 +111,7 @@ export default function ActivityTimeline({
         <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-700"></div>
 
         <div className="space-y-6">
-          {activities.map((activity, index) => (
+          {activities.map((activity) => (
             <div key={activity.id} className="relative flex items-start gap-4">
               {/* Ponto na timeline */}
               <div className="relative z-10 flex-shrink-0">

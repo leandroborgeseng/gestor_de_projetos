@@ -3,8 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useHotkeys } from "react-hotkeys-hook";
 import api from "../lib/axios.js";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 interface SearchResult {
   id: string;

@@ -21,7 +21,6 @@ interface TemplateSelectorProps {
 export default function TemplateSelector({
   isOpen,
   onClose,
-  onSelect,
 }: TemplateSelectorProps) {
   const navigate = useNavigate();
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");

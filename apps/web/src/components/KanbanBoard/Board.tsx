@@ -20,8 +20,8 @@ interface Task {
   title: string;
   description?: string;
   status: string;
-  order: number;
-  assignee?: { name: string };
+  order?: number;
+  assignee?: { id?: string; name: string; email?: string };
   estimateHours?: number;
   subtasks?: Task[];
 }

@@ -184,7 +184,6 @@ export default function GanttChart({ items }: GanttChartProps) {
         locale="pt-BR"
         columnWidth={65}
         preStepsCount={1}
-        postStepsCount={1}
         todayColor="rgba(59, 130, 246, 0.5)"
         preProjectStartTime={preProjectStartTime}
         preProjectEndTime={preProjectEndTime}

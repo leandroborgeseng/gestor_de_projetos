@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import * as v from "valibot";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import api from "../lib/axios.js";
 import Navbar from "../components/Navbar.js";
 
@@ -24,7 +24,6 @@ interface Project {
 
 export default function ProjectsManagement() {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -410,7 +409,6 @@ const projectSchema = v.object({
 type ProjectFormData = v.InferInput<typeof projectSchema>;
 
 function CreateProjectModal({ isOpen, onClose, onSuccess }: CreateProjectModalProps) {
-  const navigate = useNavigate();
   const {
     register,
     handleSubmit,
@@ -428,11 +426,9 @@ function CreateProjectModal({ isOpen, onClose, onSuccess }: CreateProjectModalPr
 
   const createProjectMutation = useMutation({
     mutationFn: (data: any) => api.post("/projects", data),
-    onSuccess: (response) => {
+    onSuccess: () => {
       onSuccess();
       reset();
-      // Opcional: navegar para o novo projeto
-      // navigate(`/projects/${response.data.id}/board`);
     },
     onError: (err: any) => {
       setError("root", {
@@ -575,7 +571,6 @@ function EditProjectModal({ project, isOpen, onClose, onSuccess }: EditProjectMo
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-    reset,
     setError,
   } = useForm<ProjectFormData>({
     resolver: valibotResolver(projectSchema),

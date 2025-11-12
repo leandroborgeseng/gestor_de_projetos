@@ -6,7 +6,6 @@ import moment from "moment";
 import "moment/locale/pt-br";
 import api from "../lib/axios.js";
 import "react-big-calendar/lib/css/react-big-calendar.css";
-import { getCurrentUser } from "../utils/user.js";
 
 moment.locale("pt-br");
 const localizer = momentLocalizer(moment);
@@ -33,10 +32,9 @@ export default function CalendarView({ projectId }: CalendarViewProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const currentUser = getCurrentUser();
   const queryClient = useQueryClient();
 
-  const { data: calendarData, isLoading } = useQuery({
+  const { data: calendarData, isLoading } = useQuery<{ tasks?: any[]; sprints?: any[] }>({
     queryKey: ["calendar", projectId, currentDate],
     queryFn: async () => {
       const start = format(startOfMonth(currentDate), "yyyy-MM-dd");
@@ -47,7 +45,7 @@ export default function CalendarView({ projectId }: CalendarViewProps) {
       return response.data;
     },
     staleTime: 5 * 60 * 1000, // cache por 5 minutos
-    cacheTime: 10 * 60 * 1000,
+    gcTime: 10 * 60 * 1000, // React Query v5 usa gcTime ao invés de cacheTime
   });
 
   // Converter tarefas e sprints para eventos do calendário

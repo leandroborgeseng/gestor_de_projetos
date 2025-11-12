@@ -23,7 +23,7 @@ export default function DependenciesManager({
   const [selectedPredecessor, setSelectedPredecessor] = useState<string>("");
   const [selectedSuccessor, setSelectedSuccessor] = useState<string>("");
 
-  const { data: dependencies, isLoading } = useQuery({
+  const { data: dependencies } = useQuery({
     queryKey: ["task-dependencies", taskId],
     queryFn: () =>
       api.get(`/projects/tasks/${taskId}/dependencies`).then((res) => res.data),

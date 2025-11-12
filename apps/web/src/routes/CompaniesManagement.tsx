@@ -254,12 +254,12 @@ export default function CompaniesManagement({ embedded = false }: { embedded?: b
                           <div className="flex flex-col gap-3">
                             <LogoPreview
                               label="Tema escuro"
-                              url={darkLogoUrl}
+                              url={darkLogoUrl ?? null}
                               backgroundColor={company.backgroundColor ?? "#0F172A"}
                             />
                             <LogoPreview
                               label="Tema claro"
-                              url={lightLogoUrl}
+                              url={lightLogoUrl ?? null}
                               backgroundColor={
                                 company.lightBackgroundColor ?? company.backgroundColor ?? "#F8FAFC"
                               }
