@@ -47,19 +47,15 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nodejs
 
-# Copiar arquivos necessários
+# Copiar arquivos necessários da API
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
-COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# Copiar arquivos do workspace pnpm para instalação
+# Copiar arquivos do workspace pnpm para instalação (raiz)
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-
-# Criar estrutura de workspace mínima para pnpm
-RUN mkdir -p ./apps/api && \
-    cp ./package.json ./apps/api/package.json
 
 # Instalar apenas dependências de produção usando pnpm
 # Isso garante que os node_modules sejam criados corretamente sem symlinks problemáticos
