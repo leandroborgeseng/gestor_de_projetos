@@ -62,18 +62,35 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# SOLUÇÃO DEFINITIVA: Copiar TODA a estrutura de node_modules do builder
-# Isso inclui o .pnpm com os pacotes reais e toda a estrutura de symlinks
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
+# SOLUÇÃO DEFINITIVA: Copiar os pacotes REAIS do .pnpm diretamente para /app/node_modules
+# Isso evita problemas com symlinks quebrados
+RUN mkdir -p /app/node_modules && \
+    # Copiar pacotes de produção do .pnpm
+    if [ -d "/app/node_modules/.pnpm" ]; then \
+        echo "Copiando pacotes do .pnpm..."; \
+        cd /app/node_modules/.pnpm && \
+        for pkg_dir in */node_modules/*; do \
+            pkg_name=$(basename "$pkg_dir"); \
+            if [ "$pkg_name" != "node_modules" ] && [ ! -e "/app/node_modules/$pkg_name" ]; then \
+                cp -r "$pkg_dir" "/app/node_modules/$pkg_name" 2>/dev/null || true; \
+            fi; \
+        done; \
+    fi
+
+# Copiar estrutura completa do builder (incluindo .pnpm para referência)
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.modules.yaml ./node_modules/.modules.yaml
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm-workspace-state-v1.json ./node_modules/.pnpm-workspace-state-v1.json
+
+# Copiar diretórios com escopo do workspace
+COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules/@prisma ./node_modules/@prisma 2>/dev/null || true
+COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules/@types ./node_modules/@types 2>/dev/null || true
 
 # Verificar estrutura
-RUN echo "=== Verificando express na raiz ===" && \
-    ls -la /app/node_modules/express 2>&1 || echo "express não encontrado na raiz" && \
-    echo "=== Verificando express no workspace ===" && \
-    ls -la /app/apps/api/node_modules/express 2>&1 || echo "express não encontrado no workspace" && \
-    echo "=== Verificando .pnpm ===" && \
-    ls -la /app/node_modules/.pnpm | head -5 || echo ".pnpm não encontrado"
+RUN echo "=== Verificando express ===" && \
+    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado!" && \
+    echo "=== Verificando @prisma/client ===" && \
+    ls -la /app/node_modules/@prisma/client 2>&1 || echo "❌ @prisma/client não encontrado!"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
@@ -81,12 +98,6 @@ RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
 USER nodejs
 
 EXPOSE 4000
-
-# IMPORTANTE: Executar do diretório onde os node_modules estão corretos
-# O Node.js ESM procura node_modules relativo ao arquivo sendo executado
-# Como dist/index.js está em /app/dist, ele procura em /app/node_modules
-# Mas os symlinks apontam para ../../../node_modules/.pnpm que precisa existir
-WORKDIR /app
 
 # Comando para iniciar a aplicação
 CMD ["node", "dist/index.js"]
