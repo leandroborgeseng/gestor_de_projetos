@@ -31,7 +31,8 @@ COPY . .
 WORKDIR /app/apps/api
 
 # Gerar Prisma Client usando npx para garantir que encontre o prisma
-RUN npx prisma generate || pnpm prisma generate
+# npx procura nos node_modules locais e globais
+RUN npx prisma generate || (cd /app && npx prisma generate) || pnpm exec prisma generate
 
 # Build da aplicação usando esbuild (não gera tipos)
 RUN pnpm build
