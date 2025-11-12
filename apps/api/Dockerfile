@@ -70,24 +70,34 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.modules.yaml ./node_modules/.modules.yaml
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm-workspace-state-v1.json ./node_modules/.pnpm-workspace-state-v1.json
 
-# 3. Copiar os symlinks dos workspaces (onde o express realmente está)
+# 3. Copiar os symlinks dos workspaces (onde os pacotes realmente estão)
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 
-# 4. Criar symlinks na raiz apontando para os pacotes reais no .pnpm
+# 4. Criar symlinks na raiz apontando para TODOS os pacotes do workspace
 # Isso permite que o Node.js encontre os módulos quando executa de /app/dist/index.js
 RUN mkdir -p /app/node_modules && \
     cd /app/node_modules && \
-    for pkg in express cors morgan helmet dotenv bcryptjs jsonwebtoken multer axios exceljs ics zod swagger-jsdoc swagger-ui-express express-rate-limit @prisma/client; do \
-        if [ -d "/app/apps/api/node_modules/$pkg" ]; then \
+    # Copiar todos os pacotes e diretórios com escopo do workspace
+    if [ -d "/app/apps/api/node_modules/@prisma" ]; then \
+        mkdir -p @prisma && \
+        cp -r /app/apps/api/node_modules/@prisma/* @prisma/ 2>/dev/null || true; \
+    fi && \
+    if [ -d "/app/apps/api/node_modules/@types" ]; then \
+        mkdir -p @types && \
+        cp -r /app/apps/api/node_modules/@types/* @types/ 2>/dev/null || true; \
+    fi && \
+    # Criar symlinks para pacotes individuais
+    for pkg in express cors morgan helmet dotenv bcryptjs jsonwebtoken multer axios exceljs ics zod swagger-jsdoc swagger-ui-express express-rate-limit; do \
+        if [ -e "/app/apps/api/node_modules/$pkg" ]; then \
             ln -sf "../apps/api/node_modules/$pkg" "$pkg" 2>/dev/null || true; \
         fi; \
     done
 
-# Verificar se express está presente (debug - executar como root)
-RUN echo "=== Verificando express via symlink na raiz ===" && \
-    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado na raiz!" && \
-    echo "=== Verificando express via symlink no workspace ===" && \
-    ls -la /app/apps/api/node_modules/express 2>&1 || echo "❌ express não encontrado no workspace!"
+# Verificar se pacotes importantes estão presentes
+RUN echo "=== Verificando express ===" && \
+    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado!" && \
+    echo "=== Verificando @prisma/client ===" && \
+    ls -la /app/node_modules/@prisma/client 2>&1 || echo "❌ @prisma/client não encontrado!"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
