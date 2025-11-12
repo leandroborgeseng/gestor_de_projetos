@@ -15,8 +15,9 @@ interface Task {
   title: string;
   description?: string;
   status: string;
+  order?: number;
   assigneeId?: string;
-  assignee?: { id: string; name: string; email: string };
+  assignee?: { id?: string; name: string; email?: string };
   sprintId?: string;
   sprint?: { id: string; name: string };
   estimateHours?: number;

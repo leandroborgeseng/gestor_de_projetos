@@ -1,4 +1,4 @@
-import { Gantt, Task, ViewMode } from "gantt-task-react";
+import { Gantt, ViewMode } from "gantt-task-react";
 import "gantt-task-react/dist/index.css";
 import { useEffect, useMemo } from "react";
 
