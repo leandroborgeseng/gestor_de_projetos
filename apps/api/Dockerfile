@@ -1,8 +1,9 @@
 # Dockerfile para API (Backend)
 FROM node:20-alpine AS base
 
-# Instalar pnpm
-RUN npm install -g pnpm
+# Instalar pnpm e dependências do Prisma
+RUN apk add --no-cache openssl1.1-compat && \
+    npm install -g pnpm
 
 # Stage 1: Dependencies
 FROM base AS deps
