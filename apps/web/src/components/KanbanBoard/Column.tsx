@@ -11,9 +11,18 @@ interface Task {
   id: string;
   title: string;
   description?: string;
-  status: string;
+  status?: string;
+  order?: number;
   assignee?: { id?: string; name: string; email?: string };
+  assigneeId?: string;
+  sprintId?: string;
+  sprint?: { id?: string; name: string };
   estimateHours?: number;
+  actualHours?: number;
+  startDate?: string;
+  dueDate?: string;
+  subtasks?: Task[];
+  tags?: Array<{ id: string; tag: { id: string; name: string; color: string } }>;
 }
 
 interface ColumnProps {
