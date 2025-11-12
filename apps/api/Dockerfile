@@ -73,11 +73,21 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm-workspace-stat
 # 3. Copiar os symlinks dos workspaces (onde o express realmente está)
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 
+# 4. Criar symlinks na raiz apontando para os pacotes reais no .pnpm
+# Isso permite que o Node.js encontre os módulos quando executa de /app/dist/index.js
+RUN mkdir -p /app/node_modules && \
+    cd /app/node_modules && \
+    for pkg in express cors morgan helmet dotenv bcryptjs jsonwebtoken multer axios exceljs ics zod swagger-jsdoc swagger-ui-express express-rate-limit @prisma/client; do \
+        if [ -d "/app/apps/api/node_modules/$pkg" ]; then \
+            ln -sf "../apps/api/node_modules/$pkg" "$pkg" 2>/dev/null || true; \
+        fi; \
+    done
+
 # Verificar se express está presente (debug - executar como root)
-RUN echo "=== Verificando estrutura ===" && \
-    ls -la /app/node_modules/.pnpm 2>&1 | head -10 && \
-    echo "=== Verificando express via symlink ===" && \
-    ls -la /app/apps/api/node_modules/express 2>&1 || echo "❌ express não encontrado!"
+RUN echo "=== Verificando express via symlink na raiz ===" && \
+    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado na raiz!" && \
+    echo "=== Verificando express via symlink no workspace ===" && \
+    ls -la /app/apps/api/node_modules/express 2>&1 || echo "❌ express não encontrado no workspace!"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
