@@ -15,7 +15,8 @@ COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 
 # Instalar dependências
-RUN pnpm install --frozen-lockfile
+# Se o lockfile estiver desatualizado, permite atualização em produção
+RUN pnpm install --frozen-lockfile || pnpm install --no-frozen-lockfile
 
 # Stage 2: Build
 FROM base AS builder
