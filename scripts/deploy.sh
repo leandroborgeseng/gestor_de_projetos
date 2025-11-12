@@ -48,12 +48,59 @@ docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
 
 # Aguardar banco de dados estar pronto
 echo -e "${YELLOW}⏳ Aguardando banco de dados estar pronto...${NC}"
-sleep 10
+MAX_RETRIES=30
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  # Verificar se o container está rodando (não restarting)
+  CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' agilepm-db 2>/dev/null || echo "not-found")
+  
+  if [ "$CONTAINER_STATUS" = "running" ]; then
+    # Tentar conectar ao banco
+    if docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T db pg_isready -U ${POSTGRES_USER:-postgres} > /dev/null 2>&1; then
+      echo -e "${GREEN}✓ Banco de dados está pronto${NC}"
+      break
+    fi
+  elif [ "$CONTAINER_STATUS" = "restarting" ] || [ "$CONTAINER_STATUS" = "exited" ]; then
+    echo -e "${RED}❌ Container do banco está com problema (status: $CONTAINER_STATUS)${NC}"
+    echo -e "${YELLOW}📋 Últimos logs do banco:${NC}"
+    docker logs agilepm-db --tail 20 2>&1 || true
+    echo ""
+    echo -e "${YELLOW}💡 Possíveis causas:${NC}"
+    echo "  1. POSTGRES_PASSWORD não está definido no .env.production"
+    echo "  2. Problema com permissões do volume"
+    echo "  3. Dados corrompidos no volume"
+    echo ""
+    echo -e "${YELLOW}💡 Para resolver:${NC}"
+    echo "  1. Verificar .env.production tem POSTGRES_PASSWORD"
+    echo "  2. Parar: docker compose -f docker-compose.prod.yml --env-file .env.production down"
+    echo "  3. Remover volume (CUIDADO - apaga dados): docker volume rm agilepm_postgres_data"
+    echo "  4. Tentar deploy novamente"
+    exit 1
+  fi
+  
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+    echo -e "${RED}❌ Timeout aguardando banco de dados${NC}"
+    echo -e "${YELLOW}📋 Logs do banco de dados:${NC}"
+    docker logs agilepm-db --tail 30 2>&1 || true
+    exit 1
+  fi
+  
+  echo -e "${YELLOW}  Aguardando... ($RETRY_COUNT/$MAX_RETRIES)${NC}"
+  sleep 2
+done
 
 # Executar migrações
 echo -e "${YELLOW}📊 Executando migrações do banco de dados...${NC}"
+sleep 3  # Aguardar um pouco mais para garantir que está totalmente pronto
+
 docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T api pnpm prisma migrate deploy || {
     echo -e "${RED}❌ Erro ao executar migrações${NC}"
+    echo -e "${YELLOW}📋 Logs da API:${NC}"
+    docker logs agilepm-api --tail 20 2>&1 || true
+    echo -e "${YELLOW}📋 Logs do banco:${NC}"
+    docker logs agilepm-db --tail 20 2>&1 || true
     exit 1
 }
 
