@@ -52,10 +52,14 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./package.json
 
-# Copiar pnpm-lock.yaml e workspace files para instalação de produção
+# Copiar arquivos do workspace pnpm para instalação
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./root-package.json
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-COPY --from=builder --chown=nodejs:nodejs /app/package.json ./root-package.json
+
+# Criar estrutura de workspace mínima para pnpm
+RUN mkdir -p ./apps/api && \
+    cp ./package.json ./apps/api/package.json
 
 # Instalar apenas dependências de produção usando pnpm
 # Isso garante que os node_modules sejam criados corretamente sem symlinks problemáticos
