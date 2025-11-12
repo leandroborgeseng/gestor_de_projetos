@@ -185,8 +185,6 @@ export default function GanttChart({ items }: GanttChartProps) {
         columnWidth={65}
         preStepsCount={1}
         todayColor="rgba(59, 130, 246, 0.5)"
-        preProjectStartTime={preProjectStartTime}
-        preProjectEndTime={preProjectEndTime}
       />
     </div>
   );

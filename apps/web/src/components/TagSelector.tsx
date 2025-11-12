@@ -57,25 +57,25 @@ export default function TagSelector({
   });
 
   const addTagMutation = useMutation({
-    mutationFn: (tagId: string) => api.post(`/tags/tasks/${taskId}`, { tagId }),
-    onSuccess: () => {
+    mutationFn: (tagIdToAdd: string) => api.post(`/tags/tasks/${taskId}`, { tagId: tagIdToAdd }),
+    onSuccess: (_, tagIdToAdd) => {
       queryClient.invalidateQueries({ queryKey: ["tags", "tasks", taskId] });
       queryClient.invalidateQueries({ queryKey: ["all-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       if (onTagsChange) {
-        onTagsChange([...selectedTagIds, tagId]);
+        onTagsChange([...selectedTagIds, tagIdToAdd]);
       }
     },
   });
 
   const removeTagMutation = useMutation({
-    mutationFn: (tagId: string) => api.delete(`/tags/tasks/${taskId}/${tagId}`),
-    onSuccess: () => {
+    mutationFn: (tagIdToRemove: string) => api.delete(`/tags/tasks/${taskId}/${tagIdToRemove}`),
+    onSuccess: (_, tagIdToRemove) => {
       queryClient.invalidateQueries({ queryKey: ["tags", "tasks", taskId] });
       queryClient.invalidateQueries({ queryKey: ["all-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       if (onTagsChange) {
-        onTagsChange(selectedTagIds.filter((id) => id !== tagId));
+        onTagsChange(selectedTagIds.filter((id) => id !== tagIdToRemove));
       }
     },
   });

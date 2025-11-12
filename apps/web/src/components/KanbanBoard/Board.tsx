@@ -105,7 +105,7 @@ export default function Board({ columns, tasks, onMoveTask, onEditTask, onCreate
         {sortedColumns.map((column) => {
           const columnTasks = tasks
             .filter((t) => t.status === column.status)
-            .sort((a, b) => a.order - b.order);
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
           return (
             <Column
