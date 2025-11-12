@@ -17,6 +17,10 @@ COPY apps/web/package.json ./apps/web/
 # Instalar dependências (incluindo devDependencies para build)
 RUN pnpm install --frozen-lockfile || (echo "Lockfile desatualizado, atualizando..." && pnpm install)
 
+# Verificar se express está instalado no deps
+RUN echo "=== Verificando express no deps ===" && \
+    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado no deps!"
+
 # Stage 2: Build
 FROM base AS builder
 WORKDIR /app
@@ -36,6 +40,10 @@ COPY --from=deps /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 # Copiar código fonte (isso pode sobrescrever alguns arquivos, mas está ok)
 COPY . .
 
+# Verificar se express está presente antes do build
+RUN echo "=== Verificando express no builder ANTES do build ===" && \
+    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado antes do build!"
+
 # Gerar Prisma Client e build
 # Executar a partir da raiz do workspace para pnpm encontrar o prisma
 WORKDIR /app
@@ -46,6 +54,10 @@ RUN cd apps/api && pnpm prisma generate || (cd /app && pnpm --filter @agilepm/ap
 # Build da aplicação usando esbuild (não gera tipos)
 WORKDIR /app/apps/api
 RUN pnpm build
+
+# Verificar se express está presente depois do build
+RUN echo "=== Verificando express no builder DEPOIS do build ===" && \
+    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado depois do build!"
 
 # Stage 3: Production
 FROM base AS runner
@@ -68,10 +80,10 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 
 # Verificar se express está presente (debug - executar como root)
-RUN echo "=== Verificando node_modules ===" && \
+RUN echo "=== Verificando node_modules no runner ===" && \
     ls -la /app/node_modules | head -30 && \
-    echo "=== Verificando express ===" && \
-    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado!"
+    echo "=== Verificando express no runner ===" && \
+    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado no runner!"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
