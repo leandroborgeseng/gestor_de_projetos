@@ -25,12 +25,6 @@ WORKDIR /app
 # Copiar dependências da raiz (pnpm workspace coloca dependências aqui)
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copiar node_modules específicos do workspace se existirem
-RUN --mount=from=deps,source=/app/apps/api/node_modules,target=/tmp/api_node_modules \
-    if [ -d /tmp/api_node_modules ] && [ "$(ls -A /tmp/api_node_modules 2>/dev/null)" ]; then \
-        mkdir -p ./apps/api && cp -r /tmp/api_node_modules ./apps/api/node_modules; \
-    fi
-
 # Copiar código fonte
 COPY . .
 
@@ -61,12 +55,6 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./package.j
 # Copiar node_modules da raiz (pnpm workspace coloca dependências aqui)
 # Esta é a estrutura que o Node.js procura quando executa de /app/dist/index.js
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-
-# Copiar node_modules do workspace específico se existir e mesclar com os da raiz
-RUN --mount=from=builder,source=/app/apps/api/node_modules,target=/tmp/api_node_modules \
-    if [ -d /tmp/api_node_modules ] && [ "$(ls -A /tmp/api_node_modules 2>/dev/null)" ]; then \
-        cp -r /tmp/api_node_modules/* ./node_modules/ 2>/dev/null || true; \
-    fi
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
