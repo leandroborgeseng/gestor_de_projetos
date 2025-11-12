@@ -63,58 +63,44 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
 # SOLUÇÃO DEFINITIVA: Copiar TODA a estrutura de node_modules do builder
-# Isso inclui o .pnpm com os pacotes reais e os symlinks funcionais
+# Isso inclui o .pnpm com TODOS os pacotes (incluindo dependências transitivas)
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 
-# Copiar TODOS os pacotes do workspace para /app/node_modules seguindo symlinks
+# Extrair TODOS os pacotes do .pnpm para /app/node_modules
+# Isso garante que todas as dependências transitivas estejam disponíveis
 RUN mkdir -p /app/node_modules && \
-    echo "Copiando pacotes do workspace..." && \
-    cd /app/apps/api/node_modules && \
-    # Processar pacotes normais
-    for item in *; do \
-        if [ "$item" != ".bin" ] && [ "$item" != "@prisma" ] && [ "$item" != "@types" ] && [ -e "/app/apps/api/node_modules/$item" ]; then \
-            # Seguir o symlink para encontrar o pacote real
-            if [ -L "/app/apps/api/node_modules/$item" ]; then \
-                real_path=$(readlink -f "/app/apps/api/node_modules/$item" 2>/dev/null || echo "") && \
-                if [ -n "$real_path" ] && [ -d "$real_path" ]; then \
-                    cp -r "$real_path" "/app/node_modules/$item" 2>/dev/null || true; \
+    echo "Extraindo TODOS os pacotes do .pnpm..." && \
+    cd /app/node_modules/.pnpm && \
+    # Processar todos os diretórios no .pnpm
+    for pkg_version_dir in */; do \
+        if [ -d "$pkg_version_dir/node_modules" ]; then \
+            cd "$pkg_version_dir/node_modules" && \
+            for pkg in *; do \
+                if [ "$pkg" != "node_modules" ] && [ ! -e "/app/node_modules/$pkg" ]; then \
+                    # Verificar se é diretório com escopo (@prisma, @types, etc)
+                    if [[ "$pkg" == @* ]]; then \
+                        # É um diretório com escopo, copiar recursivamente
+                        mkdir -p "/app/node_modules/$pkg" && \
+                        cp -r "$pkg"/* "/app/node_modules/$pkg/" 2>/dev/null || true; \
+                    else \
+                        # É um pacote normal, copiar diretamente
+                        cp -r "$pkg" "/app/node_modules/$pkg" 2>/dev/null || true; \
+                    fi; \
                 fi; \
-            elif [ -d "/app/apps/api/node_modules/$item" ]; then \
-                cp -r "/app/apps/api/node_modules/$item" "/app/node_modules/$item" 2>/dev/null || true; \
-            fi; \
+            done && \
+            cd /app/node_modules/.pnpm; \
         fi; \
     done && \
-    # Processar diretórios com escopo (@prisma, @types)
-    if [ -d "/app/apps/api/node_modules/@prisma" ]; then \
-        mkdir -p /app/node_modules/@prisma && \
-        cd /app/apps/api/node_modules/@prisma && \
-        for pkg in *; do \
-            if [ -e "/app/apps/api/node_modules/@prisma/$pkg" ]; then \
-                if [ -L "/app/apps/api/node_modules/@prisma/$pkg" ]; then \
-                    real_path=$(readlink -f "/app/apps/api/node_modules/@prisma/$pkg" 2>/dev/null || echo "") && \
-                    if [ -n "$real_path" ] && [ -d "$real_path" ]; then \
-                        cp -r "$real_path" "/app/node_modules/@prisma/$pkg" 2>/dev/null || true; \
-                    fi; \
-                elif [ -d "/app/apps/api/node_modules/@prisma/$pkg" ]; then \
-                    cp -r "/app/apps/api/node_modules/@prisma/$pkg" "/app/node_modules/@prisma/$pkg" 2>/dev/null || true; \
-                fi; \
-            fi; \
-        done; \
-    fi && \
-    if [ -d "/app/apps/api/node_modules/@types" ]; then \
-        mkdir -p /app/node_modules/@types && \
-        cp -r /app/apps/api/node_modules/@types/* /app/node_modules/@types/ 2>/dev/null || true; \
-    fi && \
-    echo "Pacotes copiados"
+    echo "Pacotes extraídos"
 
 # Verificar estrutura
 RUN echo "=== Verificando express ===" && \
-    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado!" && \
+    ls -la /app/node_modules/express 2>&1 | head -3 || echo "❌ express não encontrado!" && \
     echo "=== Verificando @prisma/client ===" && \
-    ls -la /app/node_modules/@prisma/client 2>&1 || echo "❌ @prisma/client não encontrado!" && \
-    echo "=== Listando @prisma ===" && \
-    ls -la /app/node_modules/@prisma 2>&1 || echo "@prisma não existe"
+    ls -la /app/node_modules/@prisma/client 2>&1 | head -3 || echo "❌ @prisma/client não encontrado!" && \
+    echo "=== Verificando ip-address ===" && \
+    ls -la /app/node_modules/ip-address 2>&1 | head -3 || echo "❌ ip-address não encontrado!"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
