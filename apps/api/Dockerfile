@@ -17,16 +17,6 @@ COPY apps/web/package.json ./apps/web/
 # Instalar dependências (incluindo devDependencies para build)
 RUN pnpm install --frozen-lockfile || (echo "Lockfile desatualizado, atualizando..." && pnpm install)
 
-# Verificar estrutura de node_modules após instalação
-RUN echo "=== Estrutura de node_modules na raiz ===" && \
-    ls -la /app/node_modules 2>&1 | head -20 && \
-    echo "=== Verificando express na raiz ===" && \
-    ls -la /app/node_modules/express 2>&1 || echo "express não encontrado na raiz" && \
-    echo "=== Verificando express em apps/api/node_modules ===" && \
-    ls -la /app/apps/api/node_modules/express 2>&1 || echo "express não encontrado em apps/api/node_modules" && \
-    echo "=== Listando apps/api/node_modules ===" && \
-    ls -la /app/apps/api/node_modules 2>&1 | head -20 || echo "apps/api/node_modules não existe"
-
 # Stage 2: Build
 FROM base AS builder
 WORKDIR /app
@@ -46,10 +36,6 @@ COPY --from=deps /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 # Copiar código fonte (isso pode sobrescrever alguns arquivos, mas está ok)
 COPY . .
 
-# Verificar se express está presente antes do build
-RUN echo "=== Verificando express no builder ANTES do build ===" && \
-    (ls -la /app/node_modules/express 2>&1 || ls -la /app/apps/api/node_modules/express 2>&1) || echo "❌ express não encontrado antes do build!"
-
 # Gerar Prisma Client e build
 # Executar a partir da raiz do workspace para pnpm encontrar o prisma
 WORKDIR /app
@@ -60,10 +46,6 @@ RUN cd apps/api && pnpm prisma generate || (cd /app && pnpm --filter @agilepm/ap
 # Build da aplicação usando esbuild (não gera tipos)
 WORKDIR /app/apps/api
 RUN pnpm build
-
-# Verificar se express está presente depois do build
-RUN echo "=== Verificando express no builder DEPOIS do build ===" && \
-    (ls -la /app/node_modules/express 2>&1 || ls -la /app/apps/api/node_modules/express 2>&1) || echo "❌ express não encontrado depois do build!"
 
 # Stage 3: Production
 FROM base AS runner
@@ -80,15 +62,22 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# IMPORTANTE: Copiar node_modules da raiz E dos workspaces
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules 2>/dev/null || true
+# IMPORTANTE: Copiar a estrutura completa do pnpm workspace
+# 1. Copiar o diretório .pnpm que contém os pacotes reais
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
+
+# 2. Copiar arquivos de configuração do pnpm
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.modules.yaml ./node_modules/.modules.yaml
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm-workspace-state-v1.json ./node_modules/.pnpm-workspace-state-v1.json
+
+# 3. Copiar os symlinks dos workspaces (onde o express realmente está)
+COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 
 # Verificar se express está presente (debug - executar como root)
-RUN echo "=== Verificando node_modules no runner ===" && \
-    ls -la /app/node_modules 2>&1 | head -30 && \
-    echo "=== Verificando express no runner ===" && \
-    (ls -la /app/node_modules/express 2>&1 || ls -la /app/apps/api/node_modules/express 2>&1) || echo "❌ express não encontrado no runner!"
+RUN echo "=== Verificando estrutura ===" && \
+    ls -la /app/node_modules/.pnpm 2>&1 | head -10 && \
+    echo "=== Verificando express via symlink ===" && \
+    ls -la /app/apps/api/node_modules/express 2>&1 || echo "❌ express não encontrado!"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
