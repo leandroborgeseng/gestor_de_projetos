@@ -28,13 +28,14 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Gerar Prisma Client e build
-WORKDIR /app/apps/api
+# Executar a partir da raiz do workspace para pnpm encontrar o prisma
+WORKDIR /app
 
-# Gerar Prisma Client usando npx para garantir que encontre o prisma
-# npx procura nos node_modules locais e globais
-RUN npx prisma generate || (cd /app && npx prisma generate) || pnpm exec prisma generate
+# Gerar Prisma Client - executar do workspace da API
+RUN cd apps/api && pnpm prisma generate || (cd /app && pnpm --filter @agilepm/api prisma generate) || npx prisma generate --schema=apps/api/prisma/schema.prisma
 
 # Build da aplicação usando esbuild (não gera tipos)
+WORKDIR /app/apps/api
 RUN pnpm build
 
 # Stage 3: Production
