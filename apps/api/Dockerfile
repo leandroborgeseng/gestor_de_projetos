@@ -62,26 +62,36 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# SOLUÇÃO DEFINITIVA: Copiar o .pnpm primeiro, depois extrair os pacotes reais
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
+# SOLUÇÃO SIMPLES: Copiar TODA a estrutura de node_modules do builder
+# Isso inclui o .pnpm com os pacotes reais e os symlinks funcionais
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 
-# Extrair pacotes reais do .pnpm para /app/node_modules
+# Criar symlinks na raiz seguindo os symlinks do workspace para os pacotes reais no .pnpm
 RUN mkdir -p /app/node_modules && \
-    echo "Extraindo pacotes do .pnpm..." && \
-    cd /app/node_modules/.pnpm && \
-    for pkg_dir in */node_modules/*; do \
-        if [ -d "$pkg_dir" ]; then \
-            pkg_name=$(basename "$pkg_dir"); \
-            if [ "$pkg_name" != "node_modules" ] && [ ! -e "/app/node_modules/$pkg_name" ]; then \
-                cp -r "$pkg_dir" "/app/node_modules/$pkg_name" 2>/dev/null || true; \
+    cd /app/apps/api/node_modules && \
+    for item in *; do \
+        if [ "$item" != ".bin" ] && [ -e "/app/apps/api/node_modules/$item" ]; then \
+            # Seguir o symlink para encontrar o pacote real no .pnpm
+            real_path=$(readlink -f "/app/apps/api/node_modules/$item" 2>/dev/null || echo "") && \
+            if [ -n "$real_path" ] && [ -d "$real_path" ]; then \
+                # Copiar o pacote real para /app/node_modules
+                cp -r "$real_path" "/app/node_modules/$item" 2>/dev/null || true; \
+            elif [ -d "/app/apps/api/node_modules/$item" ]; then \
+                # Se não for symlink, copiar diretamente
+                cp -r "/app/apps/api/node_modules/$item" "/app/node_modules/$item" 2>/dev/null || true; \
             fi; \
         fi; \
     done && \
-    echo "Pacotes extraídos"
-
-# Copiar diretórios com escopo do workspace (onde estão os pacotes gerados como @prisma/client)
-COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules/@prisma ./node_modules/@prisma 2>/dev/null || true
-COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules/@types ./node_modules/@types 2>/dev/null || true
+    # Copiar diretórios com escopo
+    if [ -d "/app/apps/api/node_modules/@prisma" ]; then \
+        mkdir -p /app/node_modules/@prisma && \
+        cp -r /app/apps/api/node_modules/@prisma/* /app/node_modules/@prisma/ 2>/dev/null || true; \
+    fi && \
+    if [ -d "/app/apps/api/node_modules/@types" ]; then \
+        mkdir -p /app/node_modules/@types && \
+        cp -r /app/apps/api/node_modules/@types/* /app/node_modules/@types/ 2>/dev/null || true; \
+    fi
 
 # Verificar estrutura
 RUN echo "=== Verificando express ===" && \
