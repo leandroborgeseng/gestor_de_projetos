@@ -18,10 +18,6 @@ COPY apps/web/package.json ./apps/web/
 # Tenta com frozen-lockfile primeiro, se falhar atualiza o lockfile
 RUN pnpm install --frozen-lockfile || (echo "Lockfile desatualizado, atualizando..." && pnpm install)
 
-# Verificar se node_modules foi criado
-RUN ls -la /app/node_modules | head -10 || echo "node_modules não encontrado na raiz"
-RUN ls -la /app/apps/api/node_modules 2>/dev/null | head -10 || echo "node_modules não encontrado em apps/api"
-
 # Stage 2: Build
 FROM base AS builder
 WORKDIR /app
@@ -41,9 +37,6 @@ RUN pnpm prisma generate
 # Build da aplicação usando esbuild (não gera tipos)
 RUN pnpm build
 
-# Verificar se o build foi bem-sucedido
-RUN ls -la /app/apps/api/dist/ | head -10
-
 # Stage 3: Production
 FROM base AS runner
 WORKDIR /app
@@ -59,12 +52,17 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./package.json
 
-# Copiar node_modules da raiz (pnpm workspace coloca dependências aqui)
-# IMPORTANTE: Copiar com preservação de symlinks e estrutura completa
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+# Copiar pnpm-lock.yaml e workspace files para instalação de produção
+COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./root-package.json
 
-# Verificar se express está presente após copiar
-RUN ls -la /app/node_modules/express 2>/dev/null || echo "⚠️ express não encontrado em node_modules"
+# Instalar apenas dependências de produção usando pnpm
+# Isso garante que os node_modules sejam criados corretamente sem symlinks problemáticos
+RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+
+# Verificar se express está presente (debug)
+RUN ls -la /app/node_modules/express 2>/dev/null || (echo "❌ express não encontrado!" && ls -la /app/node_modules | head -20)
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
