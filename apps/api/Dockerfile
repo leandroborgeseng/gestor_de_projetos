@@ -62,42 +62,59 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# SOLUÇÃO SIMPLES: Copiar TODA a estrutura de node_modules do builder
+# SOLUÇÃO DEFINITIVA: Copiar TODA a estrutura de node_modules do builder
 # Isso inclui o .pnpm com os pacotes reais e os symlinks funcionais
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 
-# Criar symlinks na raiz seguindo os symlinks do workspace para os pacotes reais no .pnpm
+# Copiar TODOS os pacotes do workspace para /app/node_modules seguindo symlinks
 RUN mkdir -p /app/node_modules && \
+    echo "Copiando pacotes do workspace..." && \
     cd /app/apps/api/node_modules && \
+    # Processar pacotes normais
     for item in *; do \
-        if [ "$item" != ".bin" ] && [ -e "/app/apps/api/node_modules/$item" ]; then \
-            # Seguir o symlink para encontrar o pacote real no .pnpm
-            real_path=$(readlink -f "/app/apps/api/node_modules/$item" 2>/dev/null || echo "") && \
-            if [ -n "$real_path" ] && [ -d "$real_path" ]; then \
-                # Copiar o pacote real para /app/node_modules
-                cp -r "$real_path" "/app/node_modules/$item" 2>/dev/null || true; \
+        if [ "$item" != ".bin" ] && [ "$item" != "@prisma" ] && [ "$item" != "@types" ] && [ -e "/app/apps/api/node_modules/$item" ]; then \
+            # Seguir o symlink para encontrar o pacote real
+            if [ -L "/app/apps/api/node_modules/$item" ]; then \
+                real_path=$(readlink -f "/app/apps/api/node_modules/$item" 2>/dev/null || echo "") && \
+                if [ -n "$real_path" ] && [ -d "$real_path" ]; then \
+                    cp -r "$real_path" "/app/node_modules/$item" 2>/dev/null || true; \
+                fi; \
             elif [ -d "/app/apps/api/node_modules/$item" ]; then \
-                # Se não for symlink, copiar diretamente
                 cp -r "/app/apps/api/node_modules/$item" "/app/node_modules/$item" 2>/dev/null || true; \
             fi; \
         fi; \
     done && \
-    # Copiar diretórios com escopo
+    # Processar diretórios com escopo (@prisma, @types)
     if [ -d "/app/apps/api/node_modules/@prisma" ]; then \
         mkdir -p /app/node_modules/@prisma && \
-        cp -r /app/apps/api/node_modules/@prisma/* /app/node_modules/@prisma/ 2>/dev/null || true; \
+        cd /app/apps/api/node_modules/@prisma && \
+        for pkg in *; do \
+            if [ -e "/app/apps/api/node_modules/@prisma/$pkg" ]; then \
+                if [ -L "/app/apps/api/node_modules/@prisma/$pkg" ]; then \
+                    real_path=$(readlink -f "/app/apps/api/node_modules/@prisma/$pkg" 2>/dev/null || echo "") && \
+                    if [ -n "$real_path" ] && [ -d "$real_path" ]; then \
+                        cp -r "$real_path" "/app/node_modules/@prisma/$pkg" 2>/dev/null || true; \
+                    fi; \
+                elif [ -d "/app/apps/api/node_modules/@prisma/$pkg" ]; then \
+                    cp -r "/app/apps/api/node_modules/@prisma/$pkg" "/app/node_modules/@prisma/$pkg" 2>/dev/null || true; \
+                fi; \
+            fi; \
+        done; \
     fi && \
     if [ -d "/app/apps/api/node_modules/@types" ]; then \
         mkdir -p /app/node_modules/@types && \
         cp -r /app/apps/api/node_modules/@types/* /app/node_modules/@types/ 2>/dev/null || true; \
-    fi
+    fi && \
+    echo "Pacotes copiados"
 
 # Verificar estrutura
 RUN echo "=== Verificando express ===" && \
     ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado!" && \
     echo "=== Verificando @prisma/client ===" && \
-    ls -la /app/node_modules/@prisma/client 2>&1 || echo "❌ @prisma/client não encontrado!"
+    ls -la /app/node_modules/@prisma/client 2>&1 || echo "❌ @prisma/client não encontrado!" && \
+    echo "=== Listando @prisma ===" && \
+    ls -la /app/node_modules/@prisma 2>&1 || echo "@prisma não existe"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
