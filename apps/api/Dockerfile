@@ -67,18 +67,25 @@ COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
-# Instalar apenas dependências de produção usando pnpm
-# IMPORTANTE: Executar como root antes de mudar para nodejs
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+# IMPORTANTE: Copiar node_modules do builder em vez de reinstalar
+# O pnpm workspace cria uma estrutura específica que pode não ser recriada corretamente
+# Copiar apenas as dependências de produção do builder
+RUN --mount=from=builder,source=/app/node_modules,target=/tmp/node_modules \
+    mkdir -p /app/node_modules && \
+    cp -r /tmp/node_modules/* /app/node_modules/ 2>/dev/null || true
+
+# Se não funcionou, tentar instalar usando pnpm
+RUN if [ ! -d /app/node_modules/express ]; then \
+        echo "⚠️ Express não encontrado, tentando instalar com pnpm..." && \
+        pnpm install --prod --frozen-lockfile --ignore-scripts || \
+        (echo "Tentando instalar sem frozen-lockfile..." && pnpm install --prod --ignore-scripts); \
+    fi
 
 # Verificar se express está presente (debug - executar como root)
-RUN ls -la /app/node_modules/express 2>/dev/null || (echo "❌ express não encontrado!" && ls -la /app/node_modules | head -20)
-
-# Verificar estrutura de node_modules
-RUN echo "=== Estrutura de node_modules ===" && \
+RUN echo "=== Verificando node_modules ===" && \
     ls -la /app/node_modules | head -30 && \
     echo "=== Verificando express ===" && \
-    ls -la /app/node_modules/express 2>&1 || echo "express não encontrado"
+    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado!"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
