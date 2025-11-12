@@ -62,24 +62,10 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# Copiar arquivos do workspace pnpm para instalação (raiz)
-COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
-COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-
-# IMPORTANTE: Copiar node_modules do builder em vez de reinstalar
-# O pnpm workspace cria uma estrutura específica que pode não ser recriada corretamente
-# Copiar apenas as dependências de produção do builder
-RUN --mount=from=builder,source=/app/node_modules,target=/tmp/node_modules \
-    mkdir -p /app/node_modules && \
-    cp -r /tmp/node_modules/* /app/node_modules/ 2>/dev/null || true
-
-# Se não funcionou, tentar instalar usando pnpm
-RUN if [ ! -d /app/node_modules/express ]; then \
-        echo "⚠️ Express não encontrado, tentando instalar com pnpm..." && \
-        pnpm install --prod --frozen-lockfile --ignore-scripts || \
-        (echo "Tentando instalar sem frozen-lockfile..." && pnpm install --prod --ignore-scripts); \
-    fi
+# IMPORTANTE: Copiar node_modules diretamente do builder
+# O builder já tem todas as dependências instaladas corretamente
+# Copiar preservando a estrutura do pnpm workspace
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 
 # Verificar se express está presente (debug - executar como root)
 RUN echo "=== Verificando node_modules ===" && \
