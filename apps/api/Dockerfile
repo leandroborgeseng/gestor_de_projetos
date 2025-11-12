@@ -70,26 +70,28 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.modules.yaml ./node_modules/.modules.yaml
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm-workspace-state-v1.json ./node_modules/.pnpm-workspace-state-v1.json
 
-# 3. Copiar os symlinks dos workspaces (onde os pacotes realmente estão)
+# 3. Copiar TODOS os node_modules do workspace (incluindo diretórios com escopo)
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 
-# 4. Criar symlinks na raiz apontando para TODOS os pacotes do workspace
-# Isso permite que o Node.js encontre os módulos quando executa de /app/dist/index.js
+# 4. Criar estrutura completa de node_modules na raiz copiando tudo do workspace
 RUN mkdir -p /app/node_modules && \
-    cd /app/node_modules && \
-    # Copiar todos os pacotes e diretórios com escopo do workspace
+    cd /app && \
+    # Copiar todos os diretórios com escopo (@prisma, @types, etc)
     if [ -d "/app/apps/api/node_modules/@prisma" ]; then \
-        mkdir -p @prisma && \
-        cp -r /app/apps/api/node_modules/@prisma/* @prisma/ 2>/dev/null || true; \
+        mkdir -p node_modules/@prisma && \
+        cp -r /app/apps/api/node_modules/@prisma/* node_modules/@prisma/ 2>/dev/null || true; \
     fi && \
     if [ -d "/app/apps/api/node_modules/@types" ]; then \
-        mkdir -p @types && \
-        cp -r /app/apps/api/node_modules/@types/* @types/ 2>/dev/null || true; \
+        mkdir -p node_modules/@types && \
+        cp -r /app/apps/api/node_modules/@types/* node_modules/@types/ 2>/dev/null || true; \
     fi && \
-    # Criar symlinks para pacotes individuais
-    for pkg in express cors morgan helmet dotenv bcryptjs jsonwebtoken multer axios exceljs ics zod swagger-jsdoc swagger-ui-express express-rate-limit; do \
-        if [ -e "/app/apps/api/node_modules/$pkg" ]; then \
-            ln -sf "../apps/api/node_modules/$pkg" "$pkg" 2>/dev/null || true; \
+    # Criar symlinks para todos os pacotes do workspace
+    cd /app/apps/api/node_modules && \
+    for item in *; do \
+        if [ "$item" != ".bin" ] && [ "$item" != "@prisma" ] && [ "$item" != "@types" ]; then \
+            if [ -e "/app/apps/api/node_modules/$item" ]; then \
+                ln -sf "../../apps/api/node_modules/$item" "/app/node_modules/$item" 2>/dev/null || true; \
+            fi; \
         fi; \
     done
 
@@ -97,7 +99,9 @@ RUN mkdir -p /app/node_modules && \
 RUN echo "=== Verificando express ===" && \
     ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado!" && \
     echo "=== Verificando @prisma/client ===" && \
-    ls -la /app/node_modules/@prisma/client 2>&1 || echo "❌ @prisma/client não encontrado!"
+    ls -la /app/node_modules/@prisma/client 2>&1 || echo "❌ @prisma/client não encontrado!" && \
+    echo "=== Listando node_modules ===" && \
+    ls -la /app/node_modules | head -30
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
