@@ -68,11 +68,17 @@ COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 # Instalar apenas dependências de produção usando pnpm
-# Isso garante que os node_modules sejam criados corretamente sem symlinks problemáticos
+# IMPORTANTE: Executar como root antes de mudar para nodejs
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 
-# Verificar se express está presente (debug)
+# Verificar se express está presente (debug - executar como root)
 RUN ls -la /app/node_modules/express 2>/dev/null || (echo "❌ express não encontrado!" && ls -la /app/node_modules | head -20)
+
+# Verificar estrutura de node_modules
+RUN echo "=== Estrutura de node_modules ===" && \
+    ls -la /app/node_modules | head -30 && \
+    echo "=== Verificando express ===" && \
+    ls -la /app/node_modules/express 2>&1 || echo "express não encontrado"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
