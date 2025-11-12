@@ -21,10 +21,19 @@ RUN pnpm install --frozen-lockfile || (echo "Lockfile desatualizado, atualizando
 FROM base AS builder
 WORKDIR /app
 
-# Copiar dependências da raiz (pnpm workspace coloca dependências aqui)
+# Copiar TODA a estrutura de node_modules preservando symlinks
+# O pnpm workspace cria uma estrutura complexa com symlinks
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copiar código fonte
+# Copiar estrutura completa do workspace (incluindo node_modules dos workspaces se existirem)
+COPY --from=deps /app/apps ./apps
+
+# Copiar arquivos de configuração do workspace
+COPY --from=deps /app/package.json ./package.json
+COPY --from=deps /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=deps /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+
+# Copiar código fonte (isso pode sobrescrever alguns arquivos, mas está ok)
 COPY . .
 
 # Gerar Prisma Client e build
