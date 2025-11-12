@@ -10,13 +10,15 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "./dist",
-    "rootDir": "./",
+    "rootDir": "./src",
     "declaration": false,
     "declarationMap": false,
+    "emitDeclarationOnly": false,
     "sourceMap": true,
-    "noEmit": false
+    "noEmit": false,
+    "isolatedModules": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts", "prisma"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts", "prisma", "**/__tests__/**"]
 }
 

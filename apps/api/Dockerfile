@@ -28,21 +28,13 @@ COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 # Copiar código fonte
 COPY . .
 
-# Gerar Prisma Client
+# Gerar Prisma Client e build
 WORKDIR /app/apps/api
-
-# Verificar se os arquivos de configuração estão presentes
-RUN ls -la tsconfig*.json tsup.config.ts && \
-    echo "=== Conteúdo do tsup.config.ts ===" && \
-    cat tsup.config.ts && \
-    echo "=== Conteúdo do tsconfig.build.json ===" && \
-    cat tsconfig.build.json || echo "Arquivos não encontrados"
 
 # Gerar Prisma Client
 RUN pnpm prisma generate
 
-# Build da aplicação (sem tipos) - usar variável de ambiente para garantir
-ENV TSX_DTS=false
+# Build da aplicação usando esbuild (não gera tipos)
 RUN pnpm build
 
 # Stage 3: Production
