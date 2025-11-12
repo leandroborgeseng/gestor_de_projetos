@@ -14,8 +14,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 
-# Instalar dependências
-# Tenta com frozen-lockfile primeiro, se falhar atualiza o lockfile
+# Instalar dependências (incluindo devDependencies para build)
 RUN pnpm install --frozen-lockfile || (echo "Lockfile desatualizado, atualizando..." && pnpm install)
 
 # Stage 2: Build
@@ -31,8 +30,8 @@ COPY . .
 # Gerar Prisma Client e build
 WORKDIR /app/apps/api
 
-# Gerar Prisma Client
-RUN pnpm prisma generate
+# Gerar Prisma Client usando npx para garantir que encontre o prisma
+RUN npx prisma generate || pnpm prisma generate
 
 # Build da aplicação usando esbuild (não gera tipos)
 RUN pnpm build
