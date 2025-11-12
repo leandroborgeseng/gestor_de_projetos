@@ -62,46 +62,18 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# IMPORTANTE: Copiar a estrutura completa do pnpm workspace
-# 1. Copiar o diretório .pnpm que contém os pacotes reais
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
-
-# 2. Copiar arquivos de configuração do pnpm
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.modules.yaml ./node_modules/.modules.yaml
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm-workspace-state-v1.json ./node_modules/.pnpm-workspace-state-v1.json
-
-# 3. Copiar TODOS os node_modules do workspace (incluindo diretórios com escopo)
+# SOLUÇÃO DEFINITIVA: Copiar TODA a estrutura de node_modules do builder
+# Isso inclui o .pnpm com os pacotes reais e toda a estrutura de symlinks
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 
-# 4. Criar estrutura completa de node_modules na raiz copiando tudo do workspace
-RUN mkdir -p /app/node_modules && \
-    cd /app && \
-    # Copiar todos os diretórios com escopo (@prisma, @types, etc)
-    if [ -d "/app/apps/api/node_modules/@prisma" ]; then \
-        mkdir -p node_modules/@prisma && \
-        cp -r /app/apps/api/node_modules/@prisma/* node_modules/@prisma/ 2>/dev/null || true; \
-    fi && \
-    if [ -d "/app/apps/api/node_modules/@types" ]; then \
-        mkdir -p node_modules/@types && \
-        cp -r /app/apps/api/node_modules/@types/* node_modules/@types/ 2>/dev/null || true; \
-    fi && \
-    # Criar symlinks para todos os pacotes do workspace
-    cd /app/apps/api/node_modules && \
-    for item in *; do \
-        if [ "$item" != ".bin" ] && [ "$item" != "@prisma" ] && [ "$item" != "@types" ]; then \
-            if [ -e "/app/apps/api/node_modules/$item" ]; then \
-                ln -sf "../../apps/api/node_modules/$item" "/app/node_modules/$item" 2>/dev/null || true; \
-            fi; \
-        fi; \
-    done
-
-# Verificar se pacotes importantes estão presentes
-RUN echo "=== Verificando express ===" && \
-    ls -la /app/node_modules/express 2>&1 || echo "❌ express não encontrado!" && \
-    echo "=== Verificando @prisma/client ===" && \
-    ls -la /app/node_modules/@prisma/client 2>&1 || echo "❌ @prisma/client não encontrado!" && \
-    echo "=== Listando node_modules ===" && \
-    ls -la /app/node_modules | head -30
+# Verificar estrutura
+RUN echo "=== Verificando express na raiz ===" && \
+    ls -la /app/node_modules/express 2>&1 || echo "express não encontrado na raiz" && \
+    echo "=== Verificando express no workspace ===" && \
+    ls -la /app/apps/api/node_modules/express 2>&1 || echo "express não encontrado no workspace" && \
+    echo "=== Verificando .pnpm ===" && \
+    ls -la /app/node_modules/.pnpm | head -5 || echo ".pnpm não encontrado"
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
@@ -109,6 +81,12 @@ RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
 USER nodejs
 
 EXPOSE 4000
+
+# IMPORTANTE: Executar do diretório onde os node_modules estão corretos
+# O Node.js ESM procura node_modules relativo ao arquivo sendo executado
+# Como dist/index.js está em /app/dist, ele procura em /app/node_modules
+# Mas os symlinks apontam para ../../../node_modules/.pnpm que precisa existir
+WORKDIR /app
 
 # Comando para iniciar a aplicação
 CMD ["node", "dist/index.js"]
