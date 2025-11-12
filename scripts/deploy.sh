@@ -104,6 +104,20 @@ docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T api
     exit 1
 }
 
+# Executar seed se não houver usuários
+echo -e "${YELLOW}🌱 Verificando se seed precisa ser executado...${NC}"
+USER_COUNT=$(docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T db psql -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-agilepm} -t -c "SELECT COUNT(*) FROM \"User\";" 2>/dev/null | tr -d ' \n' || echo "0")
+
+if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
+    echo -e "${YELLOW}📦 Executando seed do banco de dados...${NC}"
+    docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T api pnpm prisma db seed || {
+        echo -e "${YELLOW}⚠️  Seed pode ter falhado, mas continuando...${NC}"
+    }
+    echo -e "${GREEN}✓ Seed executado${NC}"
+else
+    echo -e "${GREEN}✓ Banco já possui $USER_COUNT usuário(s)${NC}"
+fi
+
 # Verificar saúde dos serviços
 echo -e "${YELLOW}🏥 Verificando saúde dos serviços...${NC}"
 sleep 5
