@@ -1,69 +1,74 @@
 #!/bin/bash
 
-# Script para resolver conflito de porta PostgreSQL
+# Script para verificar e resolver conflitos de porta
 # Uso: ./scripts/fix-port-conflict.sh
 
 set -e
 
-echo "🔍 Verificando o que está usando a porta 5432..."
+echo "🔍 Verificando conflitos de porta..."
+echo ""
 
-# Verificar se há containers Docker rodando na porta 5432
-echo "📦 Verificando containers Docker..."
-CONTAINERS=$(docker ps -a --filter "publish=5432" --format "{{.ID}} {{.Names}}")
+# Cores
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-if [ ! -z "$CONTAINERS" ]; then
-    echo "⚠️  Containers encontrados usando a porta 5432:"
-    echo "$CONTAINERS"
+# Verificar porta 80
+echo -e "${YELLOW}📌 Verificando porta 80...${NC}"
+if lsof -i :80 2>/dev/null || netstat -tuln | grep -q ":80 "; then
+    echo -e "${RED}❌ Porta 80 está em uso!${NC}"
     echo ""
-    echo "🛑 Parando containers..."
-    docker ps -a --filter "publish=5432" --format "{{.ID}}" | xargs -r docker stop
-    docker ps -a --filter "publish=5432" --format "{{.ID}}" | xargs -r docker rm
-    echo "✅ Containers parados e removidos"
-else
-    echo "✅ Nenhum container Docker usando a porta 5432"
-fi
-
-# Verificar se há processo PostgreSQL local rodando
-echo ""
-echo "🔍 Verificando processos PostgreSQL locais..."
-if command -v lsof &> /dev/null; then
-    PG_PROCESS=$(lsof -ti:5432 2>/dev/null || true)
-    if [ ! -z "$PG_PROCESS" ]; then
-        echo "⚠️  Processo PostgreSQL local encontrado (PID: $PG_PROCESS)"
-        echo "🛑 Parando processo..."
-        kill -9 $PG_PROCESS 2>/dev/null || true
-        echo "✅ Processo parado"
-    else
-        echo "✅ Nenhum processo local usando a porta 5432"
+    echo "Processos usando a porta 80:"
+    lsof -i :80 2>/dev/null || netstat -tulpn | grep ":80 " || echo "Não foi possível identificar"
+    echo ""
+    echo -e "${YELLOW}💡 Opções para resolver:${NC}"
+    echo "1. Parar o serviço que está usando a porta 80"
+    echo "2. Usar uma porta alternativa (ex: 8080)"
+    echo "3. Verificar se há outro container Docker usando a porta"
+    echo ""
+    
+    # Verificar containers Docker
+    echo "Containers Docker usando porta 80:"
+    docker ps --format "table {{.Names}}\t{{.Ports}}" | grep ":80" || echo "Nenhum container Docker encontrado"
+    echo ""
+    
+    # Verificar nginx
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  Nginx está rodando no sistema${NC}"
+        echo "Para parar: sudo systemctl stop nginx"
     fi
-elif command -v netstat &> /dev/null; then
-    PG_PROCESS=$(netstat -tlnp 2>/dev/null | grep :5432 | awk '{print $7}' | cut -d'/' -f1 | head -1 || true)
-    if [ ! -z "$PG_PROCESS" ]; then
-        echo "⚠️  Processo encontrado na porta 5432 (PID: $PG_PROCESS)"
-        echo "🛑 Parando processo..."
-        kill -9 $PG_PROCESS 2>/dev/null || true
-        echo "✅ Processo parado"
-    else
-        echo "✅ Nenhum processo usando a porta 5432"
+    
+    # Verificar Apache
+    if systemctl is-active --quiet apache2 2>/dev/null || systemctl is-active --quiet httpd 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  Apache está rodando no sistema${NC}"
+        echo "Para parar: sudo systemctl stop apache2 (ou httpd)"
     fi
+    
+    exit 1
 else
-    echo "⚠️  Não foi possível verificar processos (lsof/netstat não disponível)"
+    echo -e "${GREEN}✓ Porta 80 está livre${NC}"
 fi
 
-# Verificar se há serviço systemd do PostgreSQL
+# Verificar porta 4000
 echo ""
-echo "🔍 Verificando serviço PostgreSQL do systemd..."
-if systemctl is-active --quiet postgresql 2>/dev/null || systemctl is-active --quiet postgresql@* 2>/dev/null; then
-    echo "⚠️  Serviço PostgreSQL do systemd está rodando"
-    echo "💡 Para parar: sudo systemctl stop postgresql"
-    echo "💡 Para desabilitar: sudo systemctl disable postgresql"
+echo -e "${YELLOW}📌 Verificando porta 4000...${NC}"
+if lsof -i :4000 2>/dev/null || netstat -tuln | grep -q ":4000 "; then
+    echo -e "${YELLOW}⚠️  Porta 4000 está em uso${NC}"
+    lsof -i :4000 2>/dev/null || netstat -tulpn | grep ":4000 " || true
 else
-    echo "✅ Nenhum serviço PostgreSQL do systemd rodando"
+    echo -e "${GREEN}✓ Porta 4000 está livre${NC}"
+fi
+
+# Verificar porta 5432 (PostgreSQL)
+echo ""
+echo -e "${YELLOW}📌 Verificando porta 5432 (PostgreSQL)...${NC}"
+if lsof -i :5432 2>/dev/null || netstat -tuln | grep -q ":5432 "; then
+    echo -e "${YELLOW}⚠️  Porta 5432 está em uso${NC}"
+    lsof -i :5432 2>/dev/null || netstat -tulpn | grep ":5432 " || true
+else
+    echo -e "${GREEN}✓ Porta 5432 está livre${NC}"
 fi
 
 echo ""
-echo "✅ Verificação concluída!"
-echo ""
-echo "Agora você pode tentar novamente:"
-echo "  ./scripts/deploy.sh"
-
+echo -e "${GREEN}✅ Verificação concluída!${NC}"

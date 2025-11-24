@@ -46,6 +46,27 @@ fi
 
 echo -e "${GREEN}✓ Docker e Docker Compose encontrados${NC}"
 
+# Verificar conflitos de porta
+echo -e "${YELLOW}🔍 Verificando conflitos de porta...${NC}"
+if command -v lsof &> /dev/null; then
+    if lsof -i :80 2>/dev/null | grep -v "COMMAND" | grep -v "agilepm-web"; then
+        echo -e "${RED}❌ Porta 80 está em uso!${NC}"
+        echo "Processos usando porta 80:"
+        lsof -i :80 2>/dev/null | head -5
+        echo ""
+        echo -e "${YELLOW}💡 Soluções:${NC}"
+        echo "1. Parar o serviço: sudo systemctl stop nginx (ou apache2)"
+        echo "2. Usar porta alternativa: export WEB_PORT=8080"
+        echo "3. Parar containers Docker: docker ps | grep :80"
+        echo ""
+        read -p "Deseja continuar mesmo assim? (s/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Ss]$ ]]; then
+            exit 1
+        fi
+    fi
+fi
+
 # Parar containers existentes
 echo -e "${YELLOW}📦 Parando containers existentes...${NC}"
 docker-compose -f docker-compose.prod.yml --env-file .env.production down || true
