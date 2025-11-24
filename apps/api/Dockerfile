@@ -62,45 +62,47 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# SOLUÇÃO DEFINITIVA: Copiar TODA a estrutura de node_modules do builder
-# Isso inclui o .pnpm com TODOS os pacotes (incluindo dependências transitivas)
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
+# SOLUÇÃO DEFINITIVA: Usar pnpm deploy para criar uma estrutura limpa sem symlinks
+# Primeiro copiar package.json e pnpm-lock.yaml para poder fazer install
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# Extrair TODOS os pacotes do .pnpm para /app/node_modules
-# Isso garante que todas as dependências transitivas estejam disponíveis
-RUN mkdir -p /app/node_modules && \
-    echo "Extraindo TODOS os pacotes do .pnpm..." && \
-    cd /app/node_modules/.pnpm && \
-    # Processar todos os diretórios no .pnpm
-    for pkg_version_dir in */; do \
-        if [ -d "$pkg_version_dir/node_modules" ]; then \
-            cd "$pkg_version_dir/node_modules" && \
-            for pkg in *; do \
-                if [ "$pkg" != "node_modules" ] && [ ! -e "/app/node_modules/$pkg" ]; then \
-                    # Verificar se é diretório com escopo (@prisma, @types, etc)
-                    if [[ "$pkg" == @* ]]; then \
-                        # É um diretório com escopo, copiar recursivamente
-                        mkdir -p "/app/node_modules/$pkg" && \
-                        cp -r "$pkg"/* "/app/node_modules/$pkg/" 2>/dev/null || true; \
-                    else \
-                        # É um pacote normal, copiar diretamente
-                        cp -r "$pkg" "/app/node_modules/$pkg" 2>/dev/null || true; \
-                    fi; \
-                fi; \
-            done && \
-            cd /app/node_modules/.pnpm; \
-        fi; \
-    done && \
-    echo "Pacotes extraídos"
+# Copiar .pnpm store completo (onde estão TODOS os pacotes reais)
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
 
-# Verificar estrutura
+# Usar pnpm install --prod para criar os symlinks corretos baseado no lockfile
+# Isso garante que todos os pacotes necessários estejam linkados corretamente
+RUN pnpm install --prod --frozen-lockfile --ignore-scripts || \
+    (echo "Lockfile pode estar desatualizado, tentando sem frozen..." && \
+     pnpm install --prod --ignore-scripts)
+
+# Verificar estrutura crítica
 RUN echo "=== Verificando express ===" && \
-    ls -la /app/node_modules/express 2>&1 | head -3 || echo "❌ express não encontrado!" && \
+    if [ -d "/app/node_modules/express" ] || [ -L "/app/node_modules/express" ]; then \
+        ls -la /app/node_modules/express | head -3; \
+        echo "✅ express encontrado"; \
+    else \
+        echo "❌ express NÃO encontrado!"; \
+        ls -la /app/node_modules/ | grep express || echo "Nenhum express encontrado"; \
+        exit 1; \
+    fi && \
     echo "=== Verificando @prisma/client ===" && \
-    ls -la /app/node_modules/@prisma/client 2>&1 | head -3 || echo "❌ @prisma/client não encontrado!" && \
+    if [ -d "/app/node_modules/@prisma/client" ] || [ -L "/app/node_modules/@prisma/client" ]; then \
+        ls -la /app/node_modules/@prisma/client | head -3; \
+        echo "✅ @prisma/client encontrado"; \
+    else \
+        echo "❌ @prisma/client NÃO encontrado!"; \
+        ls -la /app/node_modules/@prisma/ 2>&1 || echo "Diretório @prisma não existe"; \
+    fi && \
     echo "=== Verificando ip-address ===" && \
-    ls -la /app/node_modules/ip-address 2>&1 | head -3 || echo "❌ ip-address não encontrado!"
+    if [ -d "/app/node_modules/ip-address" ] || [ -L "/app/node_modules/ip-address" ]; then \
+        ls -la /app/node_modules/ip-address | head -3; \
+        echo "✅ ip-address encontrado"; \
+    else \
+        echo "⚠️  ip-address não encontrado (pode ser dependência transitiva)"; \
+    fi
 
 # Criar diretório para uploads
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
