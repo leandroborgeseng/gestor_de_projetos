@@ -13,6 +13,18 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Atualizar código do GitHub
+echo -e "${YELLOW}📥 Atualizando código do GitHub...${NC}"
+if [ -d ".git" ]; then
+    git pull origin main || {
+        echo -e "${YELLOW}⚠️  Não foi possível fazer pull do GitHub. Continuando com código local...${NC}"
+    }
+    echo -e "${GREEN}✓ Código atualizado${NC}"
+else
+    echo -e "${YELLOW}⚠️  Diretório não é um repositório git. Continuando...${NC}"
+fi
+echo ""
+
 # Verificar se o arquivo .env.production existe
 if [ ! -f .env.production ]; then
     echo -e "${RED}❌ Arquivo .env.production não encontrado!${NC}"
