@@ -68,22 +68,23 @@ if command -v lsof &> /dev/null; then
     fi
 fi
 
-# Parar containers existentes
-echo -e "${YELLOW}📦 Parando containers existentes...${NC}"
-docker-compose -f docker-compose.prod.yml --env-file .env.production down || true
-
 # Parar e remover containers antigos manualmente (para evitar erro do docker-compose)
-echo -e "${YELLOW}🔍 Removendo containers antigos...${NC}"
+echo -e "${YELLOW}📦 Parando e removendo containers existentes...${NC}"
 docker stop agilepm-web agilepm-api agilepm-db 2>/dev/null || true
 docker rm agilepm-web agilepm-api agilepm-db 2>/dev/null || true
 
-# Parar containers antigos que possam estar usando a porta 80
-echo -e "${YELLOW}🔍 Verificando containers antigos na porta 80...${NC}"
-OLD_CONTAINERS=$(docker ps -q --filter "publish=80" 2>/dev/null || true)
-if [ ! -z "$OLD_CONTAINERS" ]; then
-    echo -e "${YELLOW}⚠️  Encontrados containers usando porta 80, parando...${NC}"
-    docker stop $OLD_CONTAINERS 2>/dev/null || true
-    docker rm $OLD_CONTAINERS 2>/dev/null || true
+# Tentar usar docker-compose down também (pode falhar, mas não importa)
+docker-compose -f docker-compose.prod.yml --env-file .env.production down 2>/dev/null || true
+
+# Parar containers antigos que possam estar usando a porta 80 ou 8080
+echo -e "${YELLOW}🔍 Verificando containers antigos nas portas 80 e 8080...${NC}"
+WEB_PORT=${WEB_PORT:-8080}
+OLD_CONTAINERS_80=$(docker ps -q --filter "publish=80" 2>/dev/null || true)
+OLD_CONTAINERS_8080=$(docker ps -q --filter "publish=$WEB_PORT" 2>/dev/null || true)
+if [ ! -z "$OLD_CONTAINERS_80" ] || [ ! -z "$OLD_CONTAINERS_8080" ]; then
+    echo -e "${YELLOW}⚠️  Encontrados containers usando portas, parando...${NC}"
+    docker stop $OLD_CONTAINERS_80 $OLD_CONTAINERS_8080 2>/dev/null || true
+    docker rm $OLD_CONTAINERS_80 $OLD_CONTAINERS_8080 2>/dev/null || true
 fi
 
 # Build das imagens
