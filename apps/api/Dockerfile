@@ -92,7 +92,8 @@ RUN chown -R nodejs:nodejs /app/node_modules || true
 # Copiar estrutura do workspace para manter compatibilidade (se necessário)
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules 2>/dev/null || echo "apps/api/node_modules não existe, continuando..."
+# Nota: apps/api/node_modules não precisa ser copiado separadamente
+# pois todos os pacotes já estão em /app/node_modules (copiado acima)
 
 # Verificar estrutura crítica
 RUN echo "=== Verificando express ===" && \
