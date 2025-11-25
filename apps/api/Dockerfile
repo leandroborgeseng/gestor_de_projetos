@@ -1,9 +1,12 @@
 # Dockerfile para API (Backend)
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 
 # Instalar pnpm e dependências do Prisma
-RUN apk add --no-cache openssl openssl-dev && \
-    npm install -g pnpm
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl ca-certificates && \
+    npm install -g pnpm && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Stage 1: Dependencies
 FROM base AS deps
@@ -70,31 +73,26 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Criar usuário não-root
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nodejs
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 --gid nodejs nodejs
 
 # Copiar arquivos necessários da API
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# Copiar arquivos necessários para pnpm deploy
+# Copiar TODA a estrutura de node_modules do builder (incluindo symlinks)
+# Isso garante que todos os pacotes e dependências transitivas estejam disponíveis
+# O --chown precisa ser feito depois porque COPY preserva symlinks
+COPY --from=builder /app/node_modules ./node_modules
+
+# Ajustar permissões (symlinks são preservados)
+RUN chown -R nodejs:nodejs /app/node_modules || true
+
+# Copiar estrutura do workspace para manter compatibilidade (se necessário)
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
-COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-
-# Copiar .pnpm store completo (onde estão TODOS os pacotes reais)
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
-
-# Criar diretório node_modules se não existir
-RUN mkdir -p /app/node_modules
-
-# Usar pnpm install --prod com o store já copiado (offline mode)
-# Isso cria os symlinks corretos usando o .pnpm store existente
-RUN cd /app && \
-    pnpm install --prod --frozen-lockfile --offline --ignore-scripts || \
-    (echo "Tentando sem frozen-lockfile..." && \
-     pnpm install --prod --offline --ignore-scripts)
+COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules 2>/dev/null || echo "apps/api/node_modules não existe, continuando..."
 
 # Verificar estrutura crítica
 RUN echo "=== Verificando express ===" && \
