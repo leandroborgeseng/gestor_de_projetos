@@ -88,9 +88,10 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules
 
 # Usar pnpm deploy para criar estrutura sem symlinks
 # Isso cria uma estrutura flat com todos os pacotes copiados fisicamente
+# --legacy é necessário no pnpm v10+
 RUN mkdir -p /app/apps/api && \
     cd /app && \
-    pnpm deploy --filter @agilepm/api --prod /app/deploy-temp && \
+    pnpm deploy --filter @agilepm/api --prod --legacy /app/deploy-temp && \
     mv /app/deploy-temp/node_modules /app/node_modules && \
     rm -rf /app/deploy-temp
 
