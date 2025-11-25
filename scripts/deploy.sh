@@ -72,12 +72,18 @@ fi
 echo -e "${YELLOW}📦 Parando containers existentes...${NC}"
 docker-compose -f docker-compose.prod.yml --env-file .env.production down || true
 
+# Parar e remover containers antigos manualmente (para evitar erro do docker-compose)
+echo -e "${YELLOW}🔍 Removendo containers antigos...${NC}"
+docker stop agilepm-web agilepm-api agilepm-db 2>/dev/null || true
+docker rm agilepm-web agilepm-api agilepm-db 2>/dev/null || true
+
 # Parar containers antigos que possam estar usando a porta 80
 echo -e "${YELLOW}🔍 Verificando containers antigos na porta 80...${NC}"
 OLD_CONTAINERS=$(docker ps -q --filter "publish=80" 2>/dev/null || true)
 if [ ! -z "$OLD_CONTAINERS" ]; then
     echo -e "${YELLOW}⚠️  Encontrados containers usando porta 80, parando...${NC}"
     docker stop $OLD_CONTAINERS 2>/dev/null || true
+    docker rm $OLD_CONTAINERS 2>/dev/null || true
 fi
 
 # Build das imagens
