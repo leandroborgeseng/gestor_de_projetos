@@ -92,7 +92,19 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules
 RUN mkdir -p /app/apps/api && \
     cd /app && \
     pnpm deploy --filter @agilepm/api --prod --legacy /app/deploy-temp && \
-    mv /app/deploy-temp/node_modules /app/node_modules && \
+    echo "=== Debug: Verificando estrutura do deploy-temp ===" && \
+    ls -la /app/deploy-temp/ && \
+    echo "=== Conteúdo de deploy-temp/node_modules ===" && \
+    ls -la /app/deploy-temp/node_modules 2>/dev/null | head -20 || echo "node_modules não existe em deploy-temp" && \
+    echo "=== Procurando express em deploy-temp ===" && \
+    find /app/deploy-temp -name "express" -type d 2>/dev/null | head -5 || echo "express não encontrado" && \
+    # Copiar node_modules do deploy-temp (pode estar em deploy-temp/apps/api/node_modules)
+    if [ -d "/app/deploy-temp/node_modules" ]; then \
+        cp -r /app/deploy-temp/node_modules/* /app/node_modules/ 2>/dev/null || true; \
+    fi && \
+    if [ -d "/app/deploy-temp/apps/api/node_modules" ]; then \
+        cp -r /app/deploy-temp/apps/api/node_modules/* /app/node_modules/ 2>/dev/null || true; \
+    fi && \
     rm -rf /app/deploy-temp
 
 # Verificar estrutura crítica
