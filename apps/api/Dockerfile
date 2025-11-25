@@ -78,51 +78,35 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# Copiar TODA a estrutura de node_modules do builder (incluindo .pnpm store e symlinks)
-# Isso garante que todos os pacotes e dependências transitivas estejam disponíveis
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-
-# Copiar estrutura do workspace para manter compatibilidade
+# Copiar arquivos necessários para pnpm deploy
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
-# Copiar node_modules do workspace da API (onde podem estar os symlinks)
-# No pnpm workspace, os pacotes podem estar em apps/api/node_modules como symlinks
-COPY --from=builder --chown=nodejs:nodejs /app/apps/api/node_modules ./apps/api/node_modules 2>/dev/null || echo "apps/api/node_modules não existe, continuando..."
+# Copiar .pnpm store (onde estão os pacotes reais)
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
 
-# Debug: verificar onde estão os pacotes
-RUN echo "=== Debug: Verificando estrutura ===" && \
-    echo "Conteúdo de /app/node_modules (primeiros 20):" && \
-    ls -la /app/node_modules 2>/dev/null | head -20 || echo "node_modules não existe" && \
-    echo "" && \
-    echo "Conteúdo de /app/apps/api/node_modules (se existir):" && \
-    ls -la /app/apps/api/node_modules 2>/dev/null | head -20 || echo "apps/api/node_modules não existe" && \
-    echo "" && \
-    echo "Procurando express em toda a estrutura:" && \
-    find /app -name "express" -type d -o -name "express" -type l 2>/dev/null | head -10 || echo "express não encontrado" && \
-    echo "" && \
-    echo "=== Verificando express ===" && \
-    if [ -d "/app/node_modules/express" ] || [ -L "/app/node_modules/express" ] || [ -d "/app/apps/api/node_modules/express" ] || [ -L "/app/apps/api/node_modules/express" ]; then \
-        if [ -d "/app/node_modules/express" ] || [ -L "/app/node_modules/express" ]; then \
-            ls -la /app/node_modules/express | head -3; \
-            echo "✅ express encontrado em /app/node_modules/express"; \
-        fi && \
-        if [ -d "/app/apps/api/node_modules/express" ] || [ -L "/app/apps/api/node_modules/express" ]; then \
-            ls -la /app/apps/api/node_modules/express | head -3; \
-            echo "✅ express encontrado em /app/apps/api/node_modules/express"; \
-        fi && \
+# Usar pnpm deploy para criar estrutura sem symlinks
+# Isso cria uma estrutura flat com todos os pacotes copiados fisicamente
+RUN mkdir -p /app/apps/api && \
+    cd /app && \
+    pnpm deploy --filter @agilepm/api --prod /app/deploy-temp && \
+    mv /app/deploy-temp/node_modules /app/node_modules && \
+    rm -rf /app/deploy-temp
+
+# Verificar estrutura crítica
+RUN echo "=== Verificando express ===" && \
+    if [ -d "/app/node_modules/express" ]; then \
+        ls -la /app/node_modules/express | head -3; \
         echo "✅ express encontrado"; \
     else \
         echo "❌ express NÃO encontrado!"; \
-        echo "Conteúdo de /app/node_modules:"; \
-        ls -la /app/node_modules 2>/dev/null | head -10 || echo "node_modules vazio ou não existe"; \
+        ls -la /app/node_modules/ 2>/dev/null | head -10 || echo "node_modules vazio"; \
         exit 1; \
     fi && \
     echo "=== Verificando @prisma/client ===" && \
-    if [ -d "/app/node_modules/@prisma/client" ] || [ -L "/app/node_modules/@prisma/client" ] || [ -d "/app/apps/api/node_modules/@prisma/client" ] || [ -L "/app/apps/api/node_modules/@prisma/client" ]; then \
-        if [ -d "/app/node_modules/@prisma/client" ] || [ -L "/app/node_modules/@prisma/client" ]; then \
-            ls -la /app/node_modules/@prisma/client | head -3; \
-        fi && \
+    if [ -d "/app/node_modules/@prisma/client" ]; then \
+        ls -la /app/node_modules/@prisma/client | head -3; \
         echo "✅ @prisma/client encontrado"; \
     else \
         echo "❌ @prisma/client NÃO encontrado!"; \
