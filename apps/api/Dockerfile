@@ -62,21 +62,14 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
-# SOLUÇÃO DEFINITIVA: Usar pnpm deploy para criar uma estrutura limpa sem symlinks
-# Primeiro copiar package.json e pnpm-lock.yaml para poder fazer install
+# Copiar TODA a estrutura de node_modules do builder (incluindo .pnpm store e symlinks)
+# Isso garante que todos os pacotes e dependências transitivas estejam disponíveis
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+
+# Copiar estrutura do workspace para manter compatibilidade
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
-COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
-
-# Copiar .pnpm store completo (onde estão TODOS os pacotes reais)
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
-
-# Usar pnpm install --prod para criar os symlinks corretos baseado no lockfile
-# Isso garante que todos os pacotes necessários estejam linkados corretamente
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts || \
-    (echo "Lockfile pode estar desatualizado, tentando sem frozen..." && \
-     pnpm install --prod --ignore-scripts)
+COPY --from=builder --chown=nodejs:nodejs /app/apps ./apps
 
 # Verificar estrutura crítica
 RUN echo "=== Verificando express ===" && \

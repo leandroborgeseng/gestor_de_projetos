@@ -48,16 +48,17 @@ echo -e "${GREEN}✓ Docker e Docker Compose encontrados${NC}"
 
 # Verificar conflitos de porta
 echo -e "${YELLOW}🔍 Verificando conflitos de porta...${NC}"
+WEB_PORT=${WEB_PORT:-8080}
 if command -v lsof &> /dev/null; then
-    if lsof -i :80 2>/dev/null | grep -v "COMMAND" | grep -v "agilepm-web"; then
-        echo -e "${RED}❌ Porta 80 está em uso!${NC}"
-        echo "Processos usando porta 80:"
-        lsof -i :80 2>/dev/null | head -5
+    if lsof -i :${WEB_PORT} 2>/dev/null | grep -v "COMMAND" | grep -v "agilepm-web"; then
+        echo -e "${RED}❌ Porta ${WEB_PORT} está em uso!${NC}"
+        echo "Processos usando porta ${WEB_PORT}:"
+        lsof -i :${WEB_PORT} 2>/dev/null | head -5
         echo ""
         echo -e "${YELLOW}💡 Soluções:${NC}"
-        echo "1. Parar o serviço: sudo systemctl stop nginx (ou apache2)"
-        echo "2. Usar porta alternativa: export WEB_PORT=8080"
-        echo "3. Parar containers Docker: docker ps | grep :80"
+        echo "1. Parar o serviço usando a porta"
+        echo "2. Usar porta alternativa: export WEB_PORT=8081"
+        echo "3. Parar containers Docker: docker ps | grep :${WEB_PORT}"
         echo ""
         read -p "Deseja continuar mesmo assim? (s/N): " -n 1 -r
         echo
@@ -165,7 +166,8 @@ else
 fi
 
 # Health check do Frontend
-if curl -f http://localhost:80 > /dev/null 2>&1; then
+WEB_PORT=${WEB_PORT:-8080}
+if curl -f http://localhost:${WEB_PORT} > /dev/null 2>&1; then
     echo -e "${GREEN}✓ Frontend está respondendo${NC}"
 else
     echo -e "${YELLOW}⚠ Frontend pode não estar respondendo ainda${NC}"
@@ -175,7 +177,7 @@ echo ""
 echo -e "${GREEN}✅ Deploy concluído com sucesso!${NC}"
 echo ""
 echo "📋 Serviços disponíveis:"
-echo "   • Frontend: http://localhost:80"
+echo "   • Frontend: http://localhost:${WEB_PORT}"
 echo "   • API: http://localhost:4000"
 echo "   • Swagger: http://localhost:4000/api-docs"
 echo ""
