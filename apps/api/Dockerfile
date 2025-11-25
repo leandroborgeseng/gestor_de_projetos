@@ -83,29 +83,19 @@ COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
-# Copiar .pnpm store (onde estão os pacotes reais)
+# Copiar .pnpm store completo (onde estão TODOS os pacotes reais)
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
 
-# Usar pnpm deploy para criar estrutura sem symlinks
-# Isso cria uma estrutura flat com todos os pacotes copiados fisicamente
-# --legacy é necessário no pnpm v10+
-RUN mkdir -p /app/apps/api && \
-    cd /app && \
-    pnpm deploy --filter @agilepm/api --prod --legacy /app/deploy-temp && \
-    echo "=== Debug: Verificando estrutura do deploy-temp ===" && \
-    ls -la /app/deploy-temp/ && \
-    echo "=== Conteúdo de deploy-temp/node_modules ===" && \
-    ls -la /app/deploy-temp/node_modules 2>/dev/null | head -20 || echo "node_modules não existe em deploy-temp" && \
-    echo "=== Procurando express em deploy-temp ===" && \
-    find /app/deploy-temp -name "express" -type d 2>/dev/null | head -5 || echo "express não encontrado" && \
-    # Copiar node_modules do deploy-temp (pode estar em deploy-temp/apps/api/node_modules)
-    if [ -d "/app/deploy-temp/node_modules" ]; then \
-        cp -r /app/deploy-temp/node_modules/* /app/node_modules/ 2>/dev/null || true; \
-    fi && \
-    if [ -d "/app/deploy-temp/apps/api/node_modules" ]; then \
-        cp -r /app/deploy-temp/apps/api/node_modules/* /app/node_modules/ 2>/dev/null || true; \
-    fi && \
-    rm -rf /app/deploy-temp
+# Copiar arquivos de estado do pnpm
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.modules.yaml ./node_modules/.modules.yaml 2>/dev/null || true
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm-workspace-state-v1.json ./node_modules/.pnpm-workspace-state-v1.json 2>/dev/null || true
+
+# Usar pnpm install --prod com o store já copiado (offline mode)
+# Isso cria os symlinks corretos usando o .pnpm store existente
+RUN cd /app && \
+    pnpm install --prod --frozen-lockfile --offline --ignore-scripts || \
+    (echo "Tentando sem frozen-lockfile..." && \
+     pnpm install --prod --offline --ignore-scripts)
 
 # Verificar estrutura crítica
 RUN echo "=== Verificando express ===" && \
