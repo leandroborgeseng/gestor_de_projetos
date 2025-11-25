@@ -86,9 +86,8 @@ COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-worksp
 # Copiar .pnpm store completo (onde estão TODOS os pacotes reais)
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm ./node_modules/.pnpm
 
-# Copiar arquivos de estado do pnpm
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.modules.yaml ./node_modules/.modules.yaml 2>/dev/null || true
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules/.pnpm-workspace-state-v1.json ./node_modules/.pnpm-workspace-state-v1.json 2>/dev/null || true
+# Criar diretório node_modules se não existir
+RUN mkdir -p /app/node_modules
 
 # Usar pnpm install --prod com o store já copiado (offline mode)
 # Isso cria os symlinks corretos usando o .pnpm store existente
