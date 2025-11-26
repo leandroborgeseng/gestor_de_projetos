@@ -99,40 +99,45 @@ COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-worksp
 # Nota: apps/api/node_modules não precisa ser copiado separadamente
 # pois todos os pacotes já estão em /app/node_modules (copiado acima)
 
-# Verificar estrutura crítica
-# No pnpm workspace, os pacotes podem estar em apps/api/node_modules
-RUN echo "=== Verificando express ===" && \
-    if [ -d "/app/node_modules/express" ] || [ -L "/app/node_modules/express" ]; then \
-        ls -la /app/node_modules/express | head -3; \
-        echo "✅ express encontrado em /app/node_modules/express"; \
-    elif [ -d "/app/apps/api/node_modules/express" ] || [ -L "/app/apps/api/node_modules/express" ]; then \
-        ls -la /app/apps/api/node_modules/express | head -3; \
-        echo "✅ express encontrado em /app/apps/api/node_modules/express"; \
-        # Criar symlink na raiz para compatibilidade
-        ln -s ../apps/api/node_modules/express /app/node_modules/express; \
-        echo "✅ Symlink criado em /app/node_modules/express"; \
-    else \
-        echo "❌ express NÃO encontrado!"; \
+# Criar symlinks para todos os pacotes do workspace na raiz
+# Isso garante que o Node.js encontre todos os pacotes quando executar de /app/dist/index.js
+RUN echo "=== Criando symlinks para pacotes do workspace ===" && \
+    if [ -d "/app/apps/api/node_modules" ]; then \
+        echo "Copiando pacotes de apps/api/node_modules para /app/node_modules..." && \
+        cd /app/apps/api/node_modules && \
+        for pkg in *; do \
+            if [ "$pkg" != "node_modules" ] && [ ! -e "/app/node_modules/$pkg" ]; then \
+                if [[ "$pkg" == @* ]]; then \
+                    # É um diretório com escopo (@prisma, @types, etc)
+                    mkdir -p "/app/node_modules/$(dirname "$pkg")" 2>/dev/null || true; \
+                    ln -s "../../apps/api/node_modules/$pkg" "/app/node_modules/$pkg" 2>/dev/null || true; \
+                else \
+                    # É um pacote normal
+                    ln -s "../apps/api/node_modules/$pkg" "/app/node_modules/$pkg" 2>/dev/null || true; \
+                fi; \
+            fi; \
+        done && \
+        echo "✅ Symlinks criados"; \
+    fi
+
+# Verificar pacotes críticos
+RUN echo "=== Verificando pacotes críticos ===" && \
+    MISSING_PACKAGES="" && \
+    for pkg in express cors @prisma/client bcryptjs jsonwebtoken; do \
+        if [ ! -d "/app/node_modules/$pkg" ] && [ ! -L "/app/node_modules/$pkg" ]; then \
+            MISSING_PACKAGES="$MISSING_PACKAGES $pkg"; \
+        fi; \
+    done && \
+    if [ -n "$MISSING_PACKAGES" ]; then \
+        echo "❌ Pacotes faltando:$MISSING_PACKAGES"; \
         echo "Conteúdo de /app/node_modules:"; \
-        ls -la /app/node_modules/ 2>/dev/null | head -10 || echo "node_modules vazio"; \
+        ls -la /app/node_modules/ 2>/dev/null | head -20 || echo "node_modules vazio"; \
         echo "Conteúdo de /app/apps/api/node_modules:"; \
-        ls -la /app/apps/api/node_modules/ 2>/dev/null | head -10 || echo "apps/api/node_modules não existe"; \
+        ls -la /app/apps/api/node_modules/ 2>/dev/null | head -20 || echo "apps/api/node_modules não existe"; \
         exit 1; \
-    fi && \
-    echo "=== Verificando @prisma/client ===" && \
-    if [ -d "/app/node_modules/@prisma/client" ] || [ -L "/app/node_modules/@prisma/client" ]; then \
-        ls -la /app/node_modules/@prisma/client | head -3; \
-        echo "✅ @prisma/client encontrado"; \
-    elif [ -d "/app/apps/api/node_modules/@prisma/client" ] || [ -L "/app/apps/api/node_modules/@prisma/client" ]; then \
-        ls -la /app/apps/api/node_modules/@prisma/client | head -3; \
-        echo "✅ @prisma/client encontrado em /app/apps/api/node_modules/@prisma/client"; \
-        # Criar diretório @prisma se não existir e criar symlink
-        mkdir -p /app/node_modules/@prisma; \
-        ln -s ../../apps/api/node_modules/@prisma/client /app/node_modules/@prisma/client; \
-        echo "✅ Symlink criado em /app/node_modules/@prisma/client"; \
     else \
-        echo "❌ @prisma/client NÃO encontrado!"; \
-        ls -la /app/node_modules/@prisma/ 2>&1 | head -5 || echo "Diretório @prisma não existe"; \
+        echo "✅ Todos os pacotes críticos encontrados"; \
+        ls -la /app/node_modules/ | grep -E "express|cors|@prisma" | head -5; \
     fi
 
 # Criar diretório para uploads
