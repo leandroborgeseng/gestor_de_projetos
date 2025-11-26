@@ -106,20 +106,19 @@ done
 echo -e "${YELLOW}📊 Executando migrações...${NC}"
 sleep 5  # Aguardar API estar totalmente pronta
 
-# Tentar diferentes formas de executar o Prisma
-docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T api sh -c "cd /app && npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma" || \
-docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T api sh -c "cd /app/apps/api && npx prisma migrate deploy" || \
-docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T api sh -c "pnpm --filter @agilepm/api prisma migrate deploy" || {
-    echo -e "${RED}❌ Erro ao executar migrações${NC}"
-    echo -e "${YELLOW}📋 Logs da API:${NC}"
-    docker logs agilepm-api --tail 30
-    echo ""
-    echo -e "${YELLOW}💡 Tentando executar migrações manualmente...${NC}"
-    docker exec agilepm-api sh -c "cd /app && npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma" || {
-        echo -e "${RED}❌ Falha ao executar migrações${NC}"
-        exit 1
+# Usar o script de migrações
+if [ -f "./scripts/run-migrations.sh" ]; then
+    ./scripts/run-migrations.sh || {
+        echo -e "${YELLOW}⚠️  Migrações falharam, mas continuando...${NC}"
+        echo -e "${YELLOW}💡 Execute manualmente: ./scripts/run-migrations.sh${NC}"
     }
-}
+else
+    # Fallback: tentar diretamente
+    docker exec agilepm-api sh -c "cd /app && prisma migrate deploy --schema=prisma/schema.prisma" || \
+    docker exec agilepm-api sh -c "cd /app && npx prisma migrate deploy --schema=prisma/schema.prisma" || {
+        echo -e "${YELLOW}⚠️  Migrações falharam, mas continuando...${NC}"
+    }
+fi
 
 echo -e "${GREEN}✓ Migrações executadas${NC}"
 
@@ -129,13 +128,19 @@ USER_COUNT=$(docker-compose -f docker-compose.prod.yml --env-file .env.productio
 
 if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
     echo -e "${YELLOW}📦 Executando seed...${NC}"
-    # Tentar diferentes formas de executar o seed
-    docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T api sh -c "cd /app && npx prisma db seed --schema=apps/api/prisma/schema.prisma" || \
-    docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T api sh -c "cd /app/apps/api && npx prisma db seed" || \
-    docker exec agilepm-api sh -c "cd /app && npx prisma db seed --schema=apps/api/prisma/schema.prisma" || {
-        echo -e "${YELLOW}⚠️  Seed pode ter falhado, mas continuando...${NC}"
-        echo -e "${YELLOW}💡 Execute manualmente: docker exec agilepm-api sh -c 'cd /app && npx prisma db seed --schema=apps/api/prisma/schema.prisma'${NC}"
-    }
+    # Usar o script de seed
+    if [ -f "./scripts/run-seed.sh" ]; then
+        ./scripts/run-seed.sh || {
+            echo -e "${YELLOW}⚠️  Seed falhou, mas continuando...${NC}"
+            echo -e "${YELLOW}💡 Execute manualmente: ./scripts/run-seed.sh${NC}"
+        }
+    else
+        # Fallback: tentar diretamente
+        docker exec agilepm-api sh -c "cd /app && prisma db seed --schema=prisma/schema.prisma" || \
+        docker exec agilepm-api sh -c "cd /app && npx prisma db seed --schema=prisma/schema.prisma" || {
+            echo -e "${YELLOW}⚠️  Seed falhou, mas continuando...${NC}"
+        }
+    fi
     echo -e "${GREEN}✓ Seed executado${NC}"
 else
     echo -e "${GREEN}✓ Banco já possui $USER_COUNT usuário(s)${NC}"

@@ -103,8 +103,8 @@ RUN if [ -d "/app/node_modules/.pnpm" ]; then \
         echo "Prisma deve estar no .pnpm store"; \
     fi
 
-# Instalar Prisma globalmente para poder executar migrações
-RUN npm install -g prisma@^5.8.0 || echo "Prisma já pode estar disponível via npx"
+# Instalar Prisma e tsx globalmente para poder executar migrações e seed
+RUN npm install -g prisma@^5.8.0 tsx@^4.7.0 || echo "Prisma/tsx já podem estar disponíveis via npx"
 
 # Criar symlinks para todos os pacotes do workspace na raiz
 # Isso garante que o Node.js encontre todos os pacotes quando executar de /app/dist/index.js
