@@ -32,6 +32,36 @@ if [ ! -f .env.production ]; then
     exit 1
 fi
 
+# Carregar variáveis
+source .env.production
+
+# Construir DATABASE_URL se não estiver definida ou se precisar codificar senha
+if [ -z "$DATABASE_URL" ] || [ -n "$POSTGRES_PASSWORD" ]; then
+    echo -e "${YELLOW}🔧 Construindo DATABASE_URL...${NC}"
+    
+    # Codificar senha para URL (escapar caracteres especiais)
+    if command -v python3 &> /dev/null; then
+        ENCODED_PASSWORD=$(echo -n "$POSTGRES_PASSWORD" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read()))")
+    elif command -v node &> /dev/null; then
+        ENCODED_PASSWORD=$(node -e "console.log(encodeURIComponent('$POSTGRES_PASSWORD'))")
+    else
+        # Fallback: usar a senha como está (pode falhar se tiver caracteres especiais)
+        ENCODED_PASSWORD="$POSTGRES_PASSWORD"
+        echo -e "${YELLOW}⚠️  Python ou Node não encontrado, usando senha sem codificação${NC}"
+    fi
+    
+    DATABASE_URL="postgresql://${POSTGRES_USER:-postgres}:${ENCODED_PASSWORD}@db:5432/${POSTGRES_DB:-agilepm}"
+    
+    # Atualizar .env.production
+    if grep -q "^DATABASE_URL=" .env.production; then
+        sed -i "s|^DATABASE_URL=.*|DATABASE_URL=$DATABASE_URL|" .env.production
+    else
+        echo "DATABASE_URL=$DATABASE_URL" >> .env.production
+    fi
+    
+    echo -e "${GREEN}✓ DATABASE_URL configurada${NC}"
+fi
+
 # Verificar Docker
 if ! command -v docker &> /dev/null; then
     echo -e "${RED}❌ Docker não está instalado!${NC}"
