@@ -57,8 +57,29 @@ docker exec agilepm-db psql -U postgres -c "ALTER USER postgres WITH PASSWORD '$
 # Reiniciar containers
 echo ""
 echo -e "${YELLOW}Reiniciando containers...${NC}"
-docker stop agilepm-api 2>/dev/null || true
-docker rm agilepm-api 2>/dev/null || true
+docker stop agilepm-api agilepm-db 2>/dev/null || true
+docker rm agilepm-api agilepm-db 2>/dev/null || true
+
+# Iniciar banco primeiro
+echo -e "${YELLOW}Iniciando banco de dados...${NC}"
+docker-compose -f docker-compose.prod.yml --env-file .env.production up -d db
+
+# Aguardar banco estar pronto
+echo -e "${YELLOW}Aguardando banco estar pronto...${NC}"
+sleep 5
+MAX_RETRIES=30
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if docker exec agilepm-db pg_isready -U postgres > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Banco está pronto${NC}"
+    break
+  fi
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  sleep 2
+done
+
+# Iniciar API
+echo -e "${YELLOW}Iniciando API...${NC}"
 docker-compose -f docker-compose.prod.yml --env-file .env.production up -d api
 
 echo ""

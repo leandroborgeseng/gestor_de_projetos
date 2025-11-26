@@ -18,7 +18,13 @@ NC='\033[0m'
 # Verificar se o container está rodando
 if ! docker ps | grep -q agilepm-api; then
     echo -e "${RED}❌ Container da API não está rodando${NC}"
-    exit 1
+    echo -e "${YELLOW}💡 Tentando iniciar containers...${NC}"
+    docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
+    sleep 5
+    if ! docker ps | grep -q agilepm-api; then
+        echo -e "${RED}❌ Falha ao iniciar containers${NC}"
+        exit 1
+    fi
 fi
 
 echo -e "${BLUE}Executando seed...${NC}"
