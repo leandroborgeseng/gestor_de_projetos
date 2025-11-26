@@ -23,12 +23,21 @@ fi
 
 echo -e "${BLUE}Executando seed...${NC}"
 
-# Verificar onde está o seed
-echo -e "${YELLOW}Verificando localização do seed...${NC}"
-SEED_PATH=$(docker exec agilepm-api sh -c "ls -la /app/prisma/seed.ts 2>/dev/null && echo '/app/prisma/seed.ts' || ls -la /app/apps/api/prisma/seed.ts 2>/dev/null && echo '/app/apps/api/prisma/seed.ts' || echo ''")
+# Verificar onde está o seed e o schema
+echo -e "${YELLOW}Verificando localização do seed e schema...${NC}"
+SEED_PATH=""
+SCHEMA_PATH=""
 
-if [ -z "$SEED_PATH" ]; then
-    echo -e "${RED}❌ Seed não encontrado!${NC}"
+if docker exec agilepm-api sh -c "test -f /app/prisma/seed.ts" 2>/dev/null; then
+    SEED_PATH="/app/prisma/seed.ts"
+    SCHEMA_PATH="/app/prisma/schema.prisma"
+elif docker exec agilepm-api sh -c "test -f /app/apps/api/prisma/seed.ts" 2>/dev/null; then
+    SEED_PATH="/app/apps/api/prisma/seed.ts"
+    SCHEMA_PATH="/app/apps/api/prisma/schema.prisma"
+fi
+
+if [ -z "$SEED_PATH" ] || [ -z "$SCHEMA_PATH" ]; then
+    echo -e "${RED}❌ Seed ou schema não encontrado!${NC}"
     echo -e "${YELLOW}📋 Verificando estrutura do container...${NC}"
     docker exec agilepm-api sh -c "ls -la /app/prisma/ 2>/dev/null | head -10"
     docker exec agilepm-api sh -c "find /app -name seed.ts 2>/dev/null | head -5"
@@ -36,27 +45,21 @@ if [ -z "$SEED_PATH" ]; then
 fi
 
 echo -e "${GREEN}✓ Seed encontrado em: $SEED_PATH${NC}"
+echo -e "${GREEN}✓ Schema encontrado em: $SCHEMA_PATH${NC}"
 
-# Executar seed usando o caminho correto
-if [ "$SEED_PATH" = "/app/prisma/seed.ts" ]; then
-    # Seed está em /app/prisma, executar de lá
-    docker exec agilepm-api sh -c "cd /app && prisma db seed --schema=prisma/schema.prisma" || \
-    docker exec agilepm-api sh -c "cd /app && npx prisma db seed --schema=prisma/schema.prisma" || \
-    docker exec agilepm-api sh -c "cd /app && node --loader tsx/esm prisma/seed.ts" || {
-        echo -e "${RED}❌ Erro ao executar seed${NC}"
-        echo -e "${YELLOW}💡 Tentando com tsx diretamente...${NC}"
-        docker exec agilepm-api sh -c "cd /app && npx tsx prisma/seed.ts" || {
-            echo -e "${RED}❌ Falha ao executar seed${NC}"
-            exit 1
-        }
-    }
-else
-    docker exec agilepm-api sh -c "cd /app/apps/api && prisma db seed" || \
-    docker exec agilepm-api sh -c "cd /app/apps/api && npx prisma db seed" || {
-        echo -e "${RED}❌ Erro ao executar seed${NC}"
+# Executar seed usando tsx diretamente com o caminho absoluto
+echo -e "${YELLOW}Executando seed com tsx...${NC}"
+SEED_DIR=$(dirname "$SEED_PATH")
+docker exec agilepm-api sh -c "cd $SEED_DIR && tsx seed.ts" || \
+docker exec agilepm-api sh -c "tsx $SEED_PATH" || \
+docker exec agilepm-api sh -c "npx tsx $SEED_PATH" || {
+    echo -e "${YELLOW}⚠️  tsx falhou, tentando com prisma db seed...${NC}"
+    docker exec agilepm-api sh -c "prisma db seed --schema=$SCHEMA_PATH" || \
+    docker exec agilepm-api sh -c "npx prisma db seed --schema=$SCHEMA_PATH" || {
+        echo -e "${RED}❌ Falha ao executar seed${NC}"
         exit 1
     }
-fi
+}
 
 echo -e "${GREEN}✅ Seed executado com sucesso!${NC}"
 echo ""
