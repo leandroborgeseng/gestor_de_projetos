@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script para corrigir DATABASE_URL no .env.production
+# Script para corrigir DATABASE_URL no .env.production e no container
 # Uso: ./scripts/fix-db-url.sh
 
 set -e
@@ -30,9 +30,12 @@ if [ -n "$POSTGRES_USER" ] && [ -n "$POSTGRES_PASSWORD" ] && [ -n "$POSTGRES_DB"
     # Codificar senha (escapar caracteres especiais)
     if command -v python3 &> /dev/null; then
         ENCODED_PASSWORD=$(echo -n "$POSTGRES_PASSWORD" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read()))")
-    else
-        # Fallback: usar node se python não estiver disponível
+    elif command -v node &> /dev/null; then
         ENCODED_PASSWORD=$(node -e "console.log(encodeURIComponent('$POSTGRES_PASSWORD'))")
+    else
+        echo -e "${RED}❌ Python ou Node não encontrado. Não é possível codificar a senha.${NC}"
+        echo -e "${YELLOW}💡 Instale Python ou Node, ou codifique a senha manualmente${NC}"
+        exit 1
     fi
     
     NEW_DATABASE_URL="postgresql://${POSTGRES_USER}:${ENCODED_PASSWORD}@db:5432/${POSTGRES_DB}"
@@ -49,13 +52,20 @@ if [ -n "$POSTGRES_USER" ] && [ -n "$POSTGRES_PASSWORD" ] && [ -n "$POSTGRES_DB"
     echo -e "${GREEN}✓ DATABASE_URL atualizada no .env.production${NC}"
     echo -e "${GREEN}✓ Formato: postgresql://${POSTGRES_USER}:***@db:5432/${POSTGRES_DB}${NC}"
     
-    # Reiniciar container da API para pegar nova variável
+    # Atualizar variável no container da API
     echo ""
-    echo -e "${YELLOW}Reiniciando container da API...${NC}"
-    docker restart agilepm-api 2>/dev/null || echo "Container não está rodando"
+    echo -e "${YELLOW}Atualizando DATABASE_URL no container da API...${NC}"
+    docker stop agilepm-api 2>/dev/null || true
+    docker rm agilepm-api 2>/dev/null || true
+    
+    # Reiniciar com nova variável
+    docker-compose -f docker-compose.prod.yml --env-file .env.production up -d api
     
     echo ""
     echo -e "${GREEN}✅ DATABASE_URL corrigida!${NC}"
+    echo ""
+    echo "Aguardando API iniciar..."
+    sleep 5
     echo ""
     echo "Agora execute:"
     echo "  ./scripts/run-migrations.sh"

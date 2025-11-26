@@ -81,6 +81,9 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/prisma ./prisma
 COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./apps/api/package.json
 
+# Copiar package.json para a raiz também (para o seed funcionar)
+COPY --from=builder --chown=nodejs:nodejs /app/apps/api/package.json ./package.json
+
 # Copiar TODA a estrutura de node_modules do builder (incluindo symlinks)
 # Isso garante que todos os pacotes e dependências transitivas estejam disponíveis
 # O --chown precisa ser feito depois porque COPY preserva symlinks

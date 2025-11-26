@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Script para verificar e corrigir DATABASE_URL
+# Script para verificar DATABASE_URL no container
 # Uso: ./scripts/check-db-url.sh
 
 set -e
 
-echo "🔍 Verificando DATABASE_URL..."
+echo "🔍 Verificando DATABASE_URL no container..."
 echo ""
 
 # Cores
@@ -15,63 +15,45 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Carregar variáveis do .env.production
+# Verificar DATABASE_URL no container
+echo -e "${BLUE}DATABASE_URL no container da API:${NC}"
+DB_URL=$(docker exec agilepm-api sh -c 'echo $DATABASE_URL' 2>/dev/null || echo "")
+
+if [ -z "$DB_URL" ]; then
+    echo -e "${RED}❌ DATABASE_URL não está definida no container${NC}"
+else
+    # Mostrar URL mascarada (esconder senha)
+    MASKED_URL=$(echo "$DB_URL" | sed 's/:[^@]*@/:***@/')
+    echo -e "${GREEN}✓ DATABASE_URL: $MASKED_URL${NC}"
+    
+    # Verificar se tem caracteres problemáticos
+    if echo "$DB_URL" | grep -qE "[@#\$%&*()+=<>?/\\|]"; then
+        echo -e "${YELLOW}⚠️  URL pode conter caracteres especiais não codificados${NC}"
+    fi
+fi
+
+echo ""
+echo -e "${BLUE}Variáveis do .env.production:${NC}"
 if [ -f .env.production ]; then
     source .env.production
-    echo -e "${BLUE}Variáveis carregadas do .env.production${NC}"
-else
-    echo -e "${RED}❌ Arquivo .env.production não encontrado!${NC}"
-    exit 1
-fi
-
-# Verificar DATABASE_URL
-if [ -z "$DATABASE_URL" ]; then
-    echo -e "${YELLOW}⚠️  DATABASE_URL não está definida${NC}"
-    echo "Construindo DATABASE_URL a partir das variáveis individuais..."
+    echo "POSTGRES_USER: ${POSTGRES_USER:-não definido}"
+    echo "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:+*** (definida)}"
+    echo "POSTGRES_DB: ${POSTGRES_DB:-não definido}"
     
-    if [ -z "$POSTGRES_USER" ] || [ -z "$POSTGRES_PASSWORD" ] || [ -z "$POSTGRES_DB" ]; then
-        echo -e "${RED}❌ POSTGRES_USER, POSTGRES_PASSWORD ou POSTGRES_DB não estão definidos${NC}"
-        exit 1
+    if [ -n "$POSTGRES_PASSWORD" ]; then
+        echo ""
+        echo -e "${YELLOW}Codificando senha para URL...${NC}"
+        if command -v python3 &> /dev/null; then
+            ENCODED=$(echo -n "$POSTGRES_PASSWORD" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read()))")
+            echo "Senha original: $POSTGRES_PASSWORD"
+            echo "Senha codificada: $ENCODED"
+            echo ""
+            echo -e "${GREEN}DATABASE_URL correta seria:${NC}"
+            echo "postgresql://${POSTGRES_USER:-postgres}:${ENCODED}@db:5432/${POSTGRES_DB:-agilepm}"
+        else
+            echo -e "${YELLOW}Python não encontrado, não é possível codificar${NC}"
+        fi
     fi
-    
-    # Codificar senha para URL (escapar caracteres especiais)
-    ENCODED_PASSWORD=$(echo -n "$POSTGRES_PASSWORD" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read()))" 2>/dev/null || echo "$POSTGRES_PASSWORD")
-    
-    DATABASE_URL="postgresql://${POSTGRES_USER}:${ENCODED_PASSWORD}@db:5432/${POSTGRES_DB}"
-    echo -e "${GREEN}✓ DATABASE_URL construída: postgresql://${POSTGRES_USER}:***@db:5432/${POSTGRES_DB}${NC}"
 else
-    echo -e "${GREEN}✓ DATABASE_URL encontrada${NC}"
+    echo -e "${RED}❌ Arquivo .env.production não encontrado${NC}"
 fi
-
-# Verificar formato da URL
-if echo "$DATABASE_URL" | grep -qE "^postgresql://[^:]+:[^@]+@[^:]+:[0-9]+/[^/]+"; then
-    echo -e "${GREEN}✓ Formato da DATABASE_URL parece correto${NC}"
-else
-    echo -e "${YELLOW}⚠️  Formato da DATABASE_URL pode estar incorreto${NC}"
-    echo "Formato esperado: postgresql://user:password@host:port/database"
-fi
-
-# Verificar se a senha precisa ser codificada
-if echo "$POSTGRES_PASSWORD" | grep -qE "[@#\$%&*()+=<>?/\\|]"; then
-    echo -e "${YELLOW}⚠️  Senha contém caracteres especiais que podem precisar ser codificados${NC}"
-    echo "Senha atual: $POSTGRES_PASSWORD"
-    ENCODED_PASSWORD=$(echo -n "$POSTGRES_PASSWORD" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read()))" 2>/dev/null || echo "$POSTGRES_PASSWORD")
-    echo "Senha codificada: $ENCODED_PASSWORD"
-    echo ""
-    echo "DATABASE_URL corrigida seria:"
-    echo "postgresql://${POSTGRES_USER}:${ENCODED_PASSWORD}@db:5432/${POSTGRES_DB}"
-fi
-
-# Testar conexão
-echo ""
-echo -e "${BLUE}Testando conexão com o banco...${NC}"
-if docker exec agilepm-api sh -c "cd /app/prisma && prisma db execute --stdin --schema=schema.prisma <<< 'SELECT 1;'" 2>/dev/null; then
-    echo -e "${GREEN}✓ Conexão com banco funcionando!${NC}"
-else
-    echo -e "${YELLOW}⚠️  Não foi possível testar conexão${NC}"
-    echo "Verifique se o container da API está rodando"
-fi
-
-echo ""
-echo -e "${GREEN}✅ Verificação concluída!${NC}"
-
