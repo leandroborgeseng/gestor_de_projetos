@@ -42,12 +42,23 @@ fi
 
 echo -e "${GREEN}✓ Schema encontrado em: $SCHEMA_PATH${NC}"
 
-# Executar migrações usando o caminho absoluto do schema
-docker exec agilepm-api sh -c "prisma migrate deploy --schema=$SCHEMA_PATH" || \
-docker exec agilepm-api sh -c "npx prisma migrate deploy --schema=$SCHEMA_PATH" || {
+# Obter DATABASE_URL do container
+DB_URL=$(docker exec agilepm-api sh -c 'echo "$DATABASE_URL"' 2>/dev/null || echo "")
+
+if [ -z "$DB_URL" ]; then
+    echo -e "${RED}❌ DATABASE_URL não está definida no container${NC}"
+    exit 1
+fi
+
+# Executar migrações passando DATABASE_URL explicitamente
+echo -e "${YELLOW}Executando migrações com DATABASE_URL explícita...${NC}"
+docker exec agilepm-api sh -c "DATABASE_URL='$DB_URL' prisma migrate deploy --schema=$SCHEMA_PATH" || \
+docker exec agilepm-api sh -c "DATABASE_URL='$DB_URL' npx prisma migrate deploy --schema=$SCHEMA_PATH" || {
     echo -e "${RED}❌ Erro ao executar migrações${NC}"
-    echo -e "${YELLOW}📋 Verificando se Prisma está instalado...${NC}"
-    docker exec agilepm-api sh -c "which prisma || echo 'prisma não encontrado'"
+    echo -e "${YELLOW}📋 Verificando DATABASE_URL...${NC}"
+    MASKED_URL=$(echo "$DB_URL" | sed 's/:[^@]*@/:***@/')
+    echo "DATABASE_URL: $MASKED_URL"
+    echo -e "${YELLOW}💡 A senha pode ter caracteres especiais que precisam ser codificados${NC}"
     exit 1
 }
 
