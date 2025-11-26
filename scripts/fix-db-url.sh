@@ -55,11 +55,25 @@ if [ -n "$POSTGRES_USER" ] && [ -n "$POSTGRES_PASSWORD" ] && [ -n "$POSTGRES_DB"
     # Atualizar variável no container da API
     echo ""
     echo -e "${YELLOW}Atualizando DATABASE_URL no container da API...${NC}"
+    
+    # Parar e remover container
     docker stop agilepm-api 2>/dev/null || true
     docker rm agilepm-api 2>/dev/null || true
     
     # Reiniciar com nova variável
     docker-compose -f docker-compose.prod.yml --env-file .env.production up -d api
+    
+    # Verificar se a variável foi aplicada corretamente
+    sleep 3
+    echo ""
+    echo -e "${BLUE}Verificando DATABASE_URL no container...${NC}"
+    CONTAINER_DB_URL=$(docker exec agilepm-api sh -c 'echo "$DATABASE_URL"' 2>/dev/null || echo "")
+    if [ -n "$CONTAINER_DB_URL" ]; then
+        MASKED=$(echo "$CONTAINER_DB_URL" | sed 's/:[^@]*@/:***@/')
+        echo -e "${GREEN}✓ DATABASE_URL no container: $MASKED${NC}"
+    else
+        echo -e "${RED}❌ DATABASE_URL não encontrada no container${NC}"
+    fi
     
     echo ""
     echo -e "${GREEN}✅ DATABASE_URL corrigida!${NC}"
