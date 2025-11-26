@@ -1,45 +1,35 @@
 #!/bin/bash
 
-# Script para executar migrações do banco de dados
+# Script para executar migrações manualmente
 # Uso: ./scripts/run-migrations.sh
 
 set -e
 
 echo "📊 Executando migrações do banco de dados..."
+echo ""
 
-# Verificar se o arquivo .env.production existe
-if [ ! -f .env.production ]; then
-    echo "❌ Arquivo .env.production não encontrado!"
+# Cores
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Verificar se o container está rodando
+if ! docker ps | grep -q agilepm-api; then
+    echo -e "${RED}❌ Container da API não está rodando${NC}"
     exit 1
 fi
 
-# Carregar variáveis do .env.production
-source .env.production
+echo -e "${BLUE}Executando migrações...${NC}"
 
-# Verificar se o banco está pronto
-echo "⏳ Verificando se o banco está pronto..."
-MAX_RETRIES=10
-RETRY_COUNT=0
-
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-  if docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T db pg_isready -U ${POSTGRES_USER:-postgres} > /dev/null 2>&1; then
-    echo "✓ Banco de dados está pronto"
-    break
-  fi
-  
-  RETRY_COUNT=$((RETRY_COUNT + 1))
-  if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-    echo "❌ Timeout aguardando banco de dados"
+# Tentar diferentes formas
+docker exec agilepm-api sh -c "cd /app && npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma" || \
+docker exec agilepm-api sh -c "cd /app/apps/api && npx prisma migrate deploy" || {
+    echo -e "${RED}❌ Erro ao executar migrações${NC}"
+    echo -e "${YELLOW}📋 Verificando se Prisma está disponível...${NC}"
+    docker exec agilepm-api sh -c "which prisma || which npx || echo 'npx não encontrado'"
     exit 1
-  fi
-  
-  echo "  Aguardando... ($RETRY_COUNT/$MAX_RETRIES)"
-  sleep 2
-done
+}
 
-# Executar migrações
-echo "🚀 Executando migrações..."
-docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T api pnpm prisma migrate deploy
-
-echo "✅ Migrações executadas com sucesso!"
-
+echo -e "${GREEN}✅ Migrações executadas com sucesso!${NC}"
