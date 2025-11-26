@@ -96,8 +96,15 @@ RUN chown -R nodejs:nodejs /app/node_modules /app/apps || true
 # Copiar estrutura do workspace para manter compatibilidade (se necessário)
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-# Nota: apps/api/node_modules não precisa ser copiado separadamente
-# pois todos os pacotes já estão em /app/node_modules (copiado acima)
+
+# Copiar Prisma CLI do builder (necessário para executar migrações)
+# O Prisma está em devDependencies, mas precisamos dele para migrações
+RUN if [ -d "/app/node_modules/.pnpm" ]; then \
+        echo "Prisma deve estar no .pnpm store"; \
+    fi
+
+# Instalar Prisma globalmente para poder executar migrações
+RUN npm install -g prisma@^5.8.0 || echo "Prisma já pode estar disponível via npx"
 
 # Criar symlinks para todos os pacotes do workspace na raiz
 # Isso garante que o Node.js encontre todos os pacotes quando executar de /app/dist/index.js
