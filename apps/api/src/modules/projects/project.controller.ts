@@ -376,6 +376,16 @@ export async function createProject(req: Request, res: Response) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    // Verificar se a empresa existe (importante para superadmin)
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { id: true },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: "Empresa não encontrada" });
+    }
+
     const project = await prisma.project.create({
       data: {
         ...parse.data,
@@ -398,16 +408,28 @@ export async function createProject(req: Request, res: Response) {
       },
     });
 
-    // Log da criação
+    // Log da criação (não bloquear se falhar)
     if (userId) {
-      logCreate(userId, companyId, "Project", project.id, project).catch(console.error);
+      logCreate(userId, companyId, "Project", project.id, project).catch((err) => {
+        console.error("Erro ao criar log de atividade:", err);
+      });
     }
 
-    // Disparar webhook
-    triggerWebhooks(WEBHOOK_EVENTS.PROJECT_CREATED, project, project.id).catch(console.error);
+    // Disparar webhook (não bloquear se falhar)
+    triggerWebhooks(WEBHOOK_EVENTS.PROJECT_CREATED, project, project.id).catch((err) => {
+      console.error("Erro ao disparar webhook:", err);
+    });
 
     res.status(201).json(project);
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Erro ao criar projeto:", error);
+    // Retornar mensagem de erro mais detalhada
+    if (error.code === "P2002") {
+      return res.status(400).json({ error: "Já existe um projeto com este nome" });
+    }
+    if (error.code === "P2003") {
+      return res.status(400).json({ error: "Referência inválida (empresa ou usuário não encontrado)" });
+    }
     handleError(error, res);
   }
 }
