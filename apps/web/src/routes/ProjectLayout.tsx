@@ -27,6 +27,7 @@ export default function ProjectLayout() {
   const navLinks = [
     { to: `/projects/${id}/tasks`, label: "Tarefas" },
     { to: `/projects/${id}/board`, label: "Board" },
+    { to: `/projects/${id}/monday`, label: "Monday View" },
     { to: `/projects/${id}/gantt`, label: "Gantt" },
     { to: `/projects/${id}/calendar`, label: "Calendário" },
     { to: `/projects/${id}/sprints`, label: "Sprints" },

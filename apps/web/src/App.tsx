@@ -7,6 +7,7 @@ import NewProject from "./routes/NewProject.js";
 import ProjectLayout from "./routes/ProjectLayout.js";
 import Tasks from "./routes/Tasks.js";
 import Board from "./routes/Board.js";
+import MondayBoard from "./routes/MondayBoard.js";
 import Gantt from "./routes/Gantt.js";
 import Calendar from "./routes/Calendar.js";
 import Sprints from "./routes/Sprints.js";
@@ -55,6 +56,7 @@ const router = createBrowserRouter([
           { index: true, element: <Tasks />, errorElement: <ErrorPage /> },
           { path: "tasks", element: <Tasks />, errorElement: <ErrorPage /> },
           { path: "board", element: <Board />, errorElement: <ErrorPage /> },
+          { path: "monday", element: <MondayBoard />, errorElement: <ErrorPage /> },
           { path: "gantt", element: <Gantt />, errorElement: <ErrorPage /> },
           { path: "calendar", element: <Calendar />, errorElement: <ErrorPage /> },
           { path: "sprints", element: <Sprints />, errorElement: <ErrorPage /> },
