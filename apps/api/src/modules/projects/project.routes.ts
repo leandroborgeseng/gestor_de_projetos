@@ -13,6 +13,7 @@ import {
   cloneProject,
   importFromMondayExcel,
   importTasksFromMondayExcel,
+  inspectMondayExcel,
 } from "./project.controller.js";
 import {
   getProjectMembers,
@@ -351,6 +352,35 @@ router.post("/:id/clone", cloneProject);
  *         description: Dados inválidos ou arquivo inválido
  */
 router.post("/:projectId/import/tasks", uploadLimiter, upload.single("file"), importTasksFromMondayExcel);
+
+/**
+ * @swagger
+ * /projects/inspect/monday:
+ *   post:
+ *     summary: Inspecionar formato de arquivo Excel do Monday.com (debug)
+ *     tags: [Projects]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo Excel exportado do Monday.com
+ *     responses:
+ *       200:
+ *         description: Informações sobre o formato do arquivo
+ *       400:
+ *         description: Arquivo inválido
+ */
+router.post("/inspect/monday", uploadLimiter, upload.single("file"), inspectMondayExcel);
 
 // Rotas de membros do projeto
 router.get("/:projectId/members", getProjectMembers);

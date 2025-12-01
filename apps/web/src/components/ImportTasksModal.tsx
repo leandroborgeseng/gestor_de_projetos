@@ -40,9 +40,27 @@ export default function ImportTasksModal({
       queryClient.invalidateQueries({ queryKey: ["tasks", projectId] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       setIsImporting(false);
+      
+      // Log do mapeamento para debug (se disponível)
+      if (data.columnMapping) {
+        console.log("Mapeamento de colunas usado:", data.columnMapping);
+      }
     },
     onError: (error: any) => {
-      alert(error.response?.data?.error || "Erro ao importar tarefas");
+      const errorData = error.response?.data;
+      let errorMessage = "Erro ao importar tarefas";
+      
+      if (errorData?.error) {
+        errorMessage = errorData.error;
+        if (errorData.foundColumns) {
+          errorMessage += `\n\nColunas encontradas no arquivo:\n${errorData.foundColumns.join(", ")}`;
+        }
+        if (errorData.suggestion) {
+          errorMessage += `\n\nSugestão: ${errorData.suggestion}`;
+        }
+      }
+      
+      alert(errorMessage);
       setIsImporting(false);
     },
   });

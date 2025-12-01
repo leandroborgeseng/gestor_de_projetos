@@ -1130,43 +1130,99 @@ export async function importTasksFromMondayExcel(req: Request, res: Response) {
 
     // Ler cabeçalhos (primeira linha)
     const headers: string[] = [];
-    worksheet.getRow(1).eachCell((cell, colNumber) => {
-      headers[colNumber] = cell.value?.toString() || "";
+    const headerRow = worksheet.getRow(1);
+    headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      headers[colNumber] = cell.value?.toString()?.trim() || "";
     });
 
+    // Log das colunas encontradas para debug
+    console.log("📋 Colunas encontradas no Excel:", headers.filter(h => h));
+
     // Mapear colunas do Monday.com para nossos campos
+    // O Monday.com exporta com nomes específicos como "Item Name", "Status", "Person", etc.
     const columnMap: Record<string, string> = {};
+    
     headers.forEach((header) => {
+      if (!header) return;
+      
       const headerLower = header.toLowerCase().trim();
-      if (headerLower.includes("name") || headerLower.includes("item")) {
-        columnMap.name = header;
-      } else if (headerLower.includes("status") || headerLower.includes("estado")) {
-        columnMap.status = header;
-      } else if (headerLower.includes("person") || headerLower.includes("assignee") || headerLower.includes("responsável") || headerLower.includes("resp")) {
-        columnMap.assignee = header;
-      } else if (headerLower.includes("date") || headerLower.includes("data")) {
-        if (!columnMap.date) {
+      
+      // Nome da tarefa - Monday.com usa "Item Name" ou "Name"
+      if (headerLower === "item name" || headerLower === "name" || headerLower === "nome" || 
+          headerLower.includes("item") && headerLower.includes("name")) {
+        if (!columnMap.name) {
+          columnMap.name = header;
+        }
+      }
+      // Status - Monday.com usa "Status" ou "Status Column"
+      else if (headerLower === "status" || headerLower === "estado" || 
+               headerLower.includes("status")) {
+        if (!columnMap.status) {
+          columnMap.status = header;
+        }
+      }
+      // Pessoa responsável - Monday.com usa "Person" ou "People"
+      else if (headerLower === "person" || headerLower === "people" || 
+               headerLower === "assignee" || headerLower === "responsável" || 
+               headerLower === "responsavel" || headerLower.includes("person") ||
+               headerLower.includes("people") || headerLower.includes("assignee")) {
+        if (!columnMap.assignee) {
+          columnMap.assignee = header;
+        }
+      }
+      // Data de vencimento - Monday.com usa "Date" ou "Due Date"
+      else if (headerLower === "due date" || headerLower === "prazo" || 
+               headerLower === "vencimento" || 
+               (headerLower.includes("due") && headerLower.includes("date"))) {
+        if (!columnMap.dueDate) {
+          columnMap.dueDate = header;
+        }
+      }
+      // Data de início - Monday.com usa "Start Date"
+      else if (headerLower === "start date" || headerLower === "data de início" ||
+               headerLower === "data de inicio" ||
+               (headerLower.includes("start") && headerLower.includes("date"))) {
+        if (!columnMap.startDate) {
+          columnMap.startDate = header;
+        }
+      }
+      // Data genérica
+      else if (headerLower === "date" || headerLower === "data") {
+        if (!columnMap.date && !columnMap.dueDate && !columnMap.startDate) {
           columnMap.date = header;
         }
-      } else if (headerLower.includes("due") || headerLower.includes("prazo") || headerLower.includes("vencimento")) {
-        columnMap.dueDate = header;
-      } else if (headerLower.includes("start") || headerLower.includes("início") || headerLower.includes("inicio")) {
-        columnMap.startDate = header;
-      } else if (headerLower.includes("description") || headerLower.includes("descrição") || headerLower.includes("notes") || headerLower.includes("notas") || headerLower.includes("observação") || headerLower.includes("observacao")) {
-        columnMap.description = header;
-      } else if (headerLower.includes("hours") || headerLower.includes("horas") || headerLower.includes("estimativa")) {
-        if (!columnMap.hours) {
-          columnMap.hours = header;
+      }
+      // Descrição - Monday.com usa "Notes" ou "Description"
+      else if (headerLower === "notes" || headerLower === "note" ||
+               headerLower === "description" || headerLower === "descrição" ||
+               headerLower === "descricao" || headerLower === "observação" ||
+               headerLower === "observacao" || headerLower.includes("notes") ||
+               headerLower.includes("description")) {
+        if (!columnMap.description) {
+          columnMap.description = header;
         }
-      } else if (headerLower.includes("numbers") || headerLower.includes("números") || headerLower.includes("numeros")) {
+      }
+      // Horas - Monday.com pode usar "Numbers" ou "Hours"
+      else if (headerLower === "hours" || headerLower === "horas" ||
+               headerLower === "numbers" || headerLower === "números" ||
+               headerLower === "numeros" || headerLower === "estimativa" ||
+               headerLower.includes("hours") || headerLower.includes("numbers")) {
         if (!columnMap.hours) {
           columnMap.hours = header;
         }
       }
     });
 
+    // Log do mapeamento para debug
+    console.log("🗺️ Mapeamento de colunas:", columnMap);
+    console.log("📊 Total de linhas na planilha:", worksheet.rowCount);
+
     if (!columnMap.name) {
-      return res.status(400).json({ error: "Coluna 'Name' ou 'Item Name' não encontrada no Excel" });
+      return res.status(400).json({ 
+        error: "Coluna 'Name' ou 'Item Name' não encontrada no Excel",
+        foundColumns: headers.filter(h => h),
+        suggestion: "O arquivo deve conter uma coluna com o nome da tarefa (ex: 'Item Name', 'Name', 'Nome')"
+      });
     }
 
     // Mapear status do Monday.com para nossos status
@@ -1267,14 +1323,26 @@ export async function importTasksFromMondayExcel(req: Request, res: Response) {
       const row = worksheet.getRow(rowNumber);
       const rowData: Record<string, any> = {};
 
+      // Ler dados da linha
       headers.forEach((header, index) => {
-        const cell = row.getCell(index + 1);
-        rowData[header] = cell.value;
+        if (header) {
+          const cell = row.getCell(index + 1);
+          // ExcelJS pode retornar diferentes tipos de valores
+          let value = cell.value;
+          
+          // Se for um objeto rich text, pegar o texto
+          if (value && typeof value === 'object' && 'richText' in value) {
+            value = value.richText.map((rt: any) => rt.text).join('');
+          }
+          
+          rowData[header] = value;
+        }
       });
 
+      // Obter nome da tarefa
       const taskName = rowData[columnMap.name]?.toString()?.trim();
       if (!taskName || taskName === "") {
-        continue;
+        continue; // Pular linhas vazias
       }
 
       try {
@@ -1282,20 +1350,70 @@ export async function importTasksFromMondayExcel(req: Request, res: Response) {
         let status: TaskStatus = "BACKLOG";
         if (columnMap.status) {
           const statusValue = rowData[columnMap.status]?.toString()?.toLowerCase().trim() || "";
+          // Tentar mapear status
           status = statusMap[statusValue] || "BACKLOG";
+          
+          // Se não encontrou, tentar buscar por palavras-chave no valor
+          if (status === "BACKLOG" && statusValue) {
+            if (statusValue.includes("done") || statusValue.includes("feito") || 
+                statusValue.includes("concluído") || statusValue.includes("concluido") ||
+                statusValue.includes("completed")) {
+              status = "DONE";
+            } else if (statusValue.includes("progress") || statusValue.includes("progresso") ||
+                       statusValue.includes("working")) {
+              status = "IN_PROGRESS";
+            } else if (statusValue.includes("blocked") || statusValue.includes("bloqueado") ||
+                       statusValue.includes("parado")) {
+              status = "BLOCKED";
+            } else if (statusValue.includes("review") || statusValue.includes("revisão") ||
+                       statusValue.includes("revisao")) {
+              status = "REVIEW";
+            } else if (statusValue.includes("todo") || statusValue.includes("fazer")) {
+              status = "TODO";
+            }
+          }
         }
 
         // Mapear assignee
         let assigneeId: string | undefined = undefined;
         if (columnMap.assignee) {
-          const assigneeValue = rowData[columnMap.assignee]?.toString()?.trim();
+          let assigneeValue = rowData[columnMap.assignee];
+          
+          // Se for um array (múltiplas pessoas), pegar a primeira
+          if (Array.isArray(assigneeValue)) {
+            assigneeValue = assigneeValue[0];
+          }
+          
+          assigneeValue = assigneeValue?.toString()?.trim();
+          
           if (assigneeValue) {
-            const user = companyUsers.find(
-              (u) =>
-                u.email?.toLowerCase().includes(assigneeValue.toLowerCase()) ||
-                u.name?.toLowerCase().includes(assigneeValue.toLowerCase()) ||
-                assigneeValue.toLowerCase().includes(u.name?.toLowerCase() || "")
+            // Tentar encontrar por email primeiro
+            let user = companyUsers.find(
+              (u) => u.email?.toLowerCase() === assigneeValue.toLowerCase()
             );
+            
+            // Se não encontrou por email, tentar por nome
+            if (!user) {
+              user = companyUsers.find(
+                (u) => {
+                  const nameLower = u.name?.toLowerCase() || "";
+                  const valueLower = assigneeValue.toLowerCase();
+                  return nameLower.includes(valueLower) || valueLower.includes(nameLower) ||
+                         nameLower === valueLower;
+                }
+              );
+            }
+            
+            // Se ainda não encontrou, tentar extrair email do texto
+            if (!user && assigneeValue.includes("@")) {
+              const emailMatch = assigneeValue.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/);
+              if (emailMatch) {
+                user = companyUsers.find(
+                  (u) => u.email?.toLowerCase() === emailMatch[1].toLowerCase()
+                );
+              }
+            }
+            
             if (user) {
               assigneeId = user.id;
             }
@@ -1321,10 +1439,16 @@ export async function importTasksFromMondayExcel(req: Request, res: Response) {
         // Mapear horas estimadas
         let estimateHours = 0;
         if (columnMap.hours) {
-          const hoursValue = rowData[columnMap.hours];
-          if (hoursValue) {
-            const parsed = parseFloat(hoursValue.toString().replace(",", "."));
-            if (!isNaN(parsed)) {
+          let hoursValue = rowData[columnMap.hours];
+          
+          // Se for um número do Excel, usar diretamente
+          if (typeof hoursValue === "number") {
+            estimateHours = hoursValue;
+          } else if (hoursValue) {
+            // Remover caracteres não numéricos exceto vírgula e ponto
+            const cleaned = hoursValue.toString().replace(/[^\d,.-]/g, "").replace(",", ".");
+            const parsed = parseFloat(cleaned);
+            if (!isNaN(parsed) && parsed > 0) {
               estimateHours = parsed;
             }
           }
@@ -1354,12 +1478,15 @@ export async function importTasksFromMondayExcel(req: Request, res: Response) {
           });
         }
       } catch (error: any) {
+        console.error(`❌ Erro ao processar linha ${rowNumber}:`, error);
         errors.push({
           row: rowNumber,
           error: error.message || "Erro ao processar tarefa",
         });
       }
     }
+
+    console.log(`✅ Importação concluída: ${tasks.length} tarefas criadas, ${errors.length} erros`);
 
     // Deletar arquivo temporário
     try {
@@ -1380,8 +1507,88 @@ export async function importTasksFromMondayExcel(req: Request, res: Response) {
       imported: tasks.length,
       errors: errors.length > 0 ? errors : undefined,
       message: `${tasks.length} tarefa(s) importada(s) com sucesso${errors.length > 0 ? ` (${errors.length} erro(s))` : ""}`,
+      columnMapping: columnMap, // Retornar mapeamento para debug
     });
-  } catch (error) {
-    handleError(error, res);
+  } catch (error: any) {
+    console.error("❌ Erro na importação:", error);
+    res.status(500).json({
+      error: error.message || "Erro ao importar tarefas",
+      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
+  }
+}
+
+/**
+ * Endpoint de debug para inspecionar o formato do arquivo Excel antes de importar
+ */
+export async function inspectMondayExcel(req: Request, res: Response) {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: "Arquivo Excel é obrigatório" });
+    }
+
+    // Ler arquivo Excel
+    const workbook = new ExcelJS.Workbook();
+    const filePath = getFilePath(file.filename);
+    await workbook.xlsx.readFile(filePath);
+
+    // Pegar primeira planilha
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      return res.status(400).json({ error: "Planilha vazia ou inválida" });
+    }
+
+    // Ler cabeçalhos
+    const headers: string[] = [];
+    const headerRow = worksheet.getRow(1);
+    headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      headers[colNumber] = cell.value?.toString()?.trim() || "";
+    });
+
+    // Ler primeiras 5 linhas de dados para exemplo
+    const sampleRows: any[] = [];
+    for (let rowNumber = 2; rowNumber <= Math.min(6, worksheet.rowCount); rowNumber++) {
+      const row = worksheet.getRow(rowNumber);
+      const rowData: Record<string, any> = {};
+      
+      headers.forEach((header, index) => {
+        if (header) {
+          const cell = row.getCell(index + 1);
+          let value = cell.value;
+          
+          if (value && typeof value === 'object' && 'richText' in value) {
+            value = value.richText.map((rt: any) => rt.text).join('');
+          }
+          
+          rowData[header] = value;
+        }
+      });
+      
+      sampleRows.push(rowData);
+    }
+
+    // Deletar arquivo temporário
+    try {
+      const fs = await import("fs");
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (error) {
+      // Ignorar erro ao deletar arquivo
+    }
+
+    res.status(200).json({
+      totalRows: worksheet.rowCount - 1, // Excluindo cabeçalho
+      columns: headers.filter(h => h),
+      sampleRows,
+      message: "Arquivo inspecionado com sucesso. Use essas informações para verificar o formato antes de importar.",
+    });
+  } catch (error: any) {
+    console.error("❌ Erro ao inspecionar arquivo:", error);
+    res.status(500).json({
+      error: error.message || "Erro ao inspecionar arquivo",
+      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
   }
 }
