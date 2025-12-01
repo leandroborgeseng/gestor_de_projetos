@@ -1,9 +1,9 @@
 # Dockerfile para API (Backend)
 FROM node:20-slim AS base
 
-# Instalar pnpm e dependências do Prisma
+# Instalar pnpm, curl (para healthcheck) e dependências do Prisma
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends openssl ca-certificates && \
+    apt-get install -y --no-install-recommends openssl ca-certificates curl && \
     npm install -g pnpm && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
