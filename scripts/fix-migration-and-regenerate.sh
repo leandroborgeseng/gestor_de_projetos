@@ -82,6 +82,10 @@ docker exec agilepm-api sh -c "cd $WORK_DIR && DATABASE_URL='$DB_URL' node node_
     echo -e "${YELLOW}💡 O Prisma Client será regenerado no próximo build do Docker${NC}"
     echo -e "${YELLOW}💡 Fazendo rebuild do container...${NC}"
     
+    # Parar e remover container antigo
+    docker stop agilepm-api 2>/dev/null || true
+    docker rm agilepm-api 2>/dev/null || true
+    
     # Reconstruir container como fallback
     docker-compose -f docker-compose.prod.yml --env-file .env.production build api
     docker-compose -f docker-compose.prod.yml --env-file .env.production up -d api
@@ -90,10 +94,16 @@ docker exec agilepm-api sh -c "cd $WORK_DIR && DATABASE_URL='$DB_URL' node node_
 echo -e "${GREEN}✅ Prisma Client regenerado!${NC}"
 echo ""
 
-echo -e "${YELLOW}4️⃣ Reiniciando container da API...${NC}"
+echo -e "${YELLOW}4️⃣ Parando e removendo container antigo...${NC}"
 
-# Reiniciar container para carregar novo Prisma Client
-docker restart agilepm-api
+# Parar e remover container antigo (evita erro ContainerConfig)
+docker stop agilepm-api 2>/dev/null || true
+docker rm agilepm-api 2>/dev/null || true
+
+echo -e "${YELLOW}5️⃣ Iniciando novo container da API...${NC}"
+
+# Iniciar novo container
+docker-compose -f docker-compose.prod.yml --env-file .env.production up -d api
 
 echo -e "${GREEN}✅ Container reiniciado!${NC}"
 echo ""
