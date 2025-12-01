@@ -30,6 +30,20 @@ git pull origin main || {
 echo -e "${GREEN}✓ Código atualizado${NC}"
 echo ""
 
+# 1.5. Corrigir permissões de uploads
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}1️⃣.5️⃣  Corrigindo permissões de uploads...${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+if [ -f "./scripts/fix-uploads-permissions.sh" ]; then
+    bash ./scripts/fix-uploads-permissions.sh
+else
+    echo -e "${YELLOW}⚠️  Script de permissões não encontrado. Criando diretório manualmente...${NC}"
+    mkdir -p ./apps/api/uploads
+    chmod 755 ./apps/api/uploads
+fi
+echo -e "${GREEN}✓ Permissões corrigidas${NC}"
+echo ""
+
 # 2. Reconstruir containers
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}2️⃣  Reconstruindo containers...${NC}"
