@@ -207,27 +207,6 @@ export default function MondayBoard() {
     return 120;
   };
 
-  
-  // Filtros avançados
-  const [filters, setFilters] = useState(savedConfig?.filters || {
-    assignees: [] as string[],
-    tags: [] as string[],
-    sprints: [] as string[],
-    dateRange: {
-      start: "",
-      end: "",
-    },
-    hasDueDate: null as boolean | null,
-    estimateHours: {
-      min: "",
-      max: "",
-    },
-    actualHours: {
-      min: "",
-      max: "",
-    },
-  });
-
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
