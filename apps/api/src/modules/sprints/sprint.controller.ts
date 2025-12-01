@@ -70,7 +70,15 @@ export async function createSprint(req: Request, res: Response) {
 
     const { projectId } = req.params;
     const companyId = req.companyId;
-    const { startDate, endDate, ...data } = parse.data;
+    let { startDate, endDate, ...data } = parse.data;
+    
+    // Se as datas vierem no formato YYYY-MM-DD, converter para ISO datetime
+    if (startDate && typeof startDate === "string" && !startDate.includes("T")) {
+      startDate = new Date(startDate + "T00:00:00").toISOString();
+    }
+    if (endDate && typeof endDate === "string" && !endDate.includes("T")) {
+      endDate = new Date(endDate + "T23:59:59").toISOString();
+    }
     
     console.log("Criando sprint:", { projectId, companyId, data: { ...data, startDate, endDate } });
 
