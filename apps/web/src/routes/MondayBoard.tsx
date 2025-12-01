@@ -172,8 +172,31 @@ export default function MondayBoard() {
     },
   });
 
+  const deleteTaskMutation = useMutation({
+    mutationFn: (taskId: string) => api.delete(`/projects/tasks/${taskId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", id] });
+      setSelectedTasks(new Set());
+    },
+  });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async ({ taskIds, data }: { taskIds: string[]; data: any }) => {
+      await Promise.all(
+        taskIds.map((taskId) => api.patch(`/projects/tasks/${taskId}`, data))
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", id] });
+      setSelectedTasks(new Set());
+      setShowBulkActions(false);
+    },
+  });
+
   const [creatingSubtaskFor, setCreatingSubtaskFor] = useState<string | null>(null);
   const [subtaskTitle, setSubtaskTitle] = useState("");
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [showBulkActions, setShowBulkActions] = useState(false);
 
   // Organizar tarefas em árvore (pais e filhos)
   const taskTree = useMemo(() => {
@@ -456,6 +479,51 @@ export default function MondayBoard() {
 
   const visibleColumns = columns.filter((col) => col.visible).sort((a, b) => a.order - b.order);
 
+  const handleSelectTask = (taskId: string, checked: boolean) => {
+    const newSelected = new Set(selectedTasks);
+    if (checked) {
+      newSelected.add(taskId);
+    } else {
+      newSelected.delete(taskId);
+    }
+    setSelectedTasks(newSelected);
+    setShowBulkActions(newSelected.size > 0);
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedTasks(new Set(filteredTasks.map((t) => t.id)));
+      setShowBulkActions(true);
+    } else {
+      setSelectedTasks(new Set());
+      setShowBulkActions(false);
+    }
+  };
+
+  const handleBulkAction = (action: string, value?: any) => {
+    const taskIds = Array.from(selectedTasks);
+    if (taskIds.length === 0) return;
+
+    switch (action) {
+      case "delete":
+        if (confirm(`Tem certeza que deseja deletar ${taskIds.length} tarefa(s)?`)) {
+          taskIds.forEach((taskId) => deleteTaskMutation.mutate(taskId));
+        }
+        break;
+      case "status":
+        if (value) {
+          bulkUpdateMutation.mutate({ taskIds, data: { status: value } });
+        }
+        break;
+      case "assignee":
+        bulkUpdateMutation.mutate({ taskIds, data: { assigneeId: value || null } });
+        break;
+      case "sprint":
+        bulkUpdateMutation.mutate({ taskIds, data: { sprintId: value || null } });
+        break;
+    }
+  };
+
   const SortableRow = ({ task, isSubtask = false }: { task: Task; isSubtask?: boolean }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
       id: task.id,
@@ -485,6 +553,18 @@ export default function MondayBoard() {
             return (
               <td key={col.id} className="px-4 py-3">
                 <div className="flex items-center gap-1">
+                  {!isSubtask && (
+                    <input
+                      type="checkbox"
+                      checked={selectedTasks.has(task.id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleSelectTask(task.id, e.target.checked);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded cursor-pointer"
+                    />
+                  )}
                   {hasSubtasks && (
                     <button
                       onClick={(e) => {
@@ -1151,6 +1231,83 @@ export default function MondayBoard() {
           </div>
         )}
 
+        {/* Bulk Actions Bar */}
+        {showBulkActions && selectedTasks.size > 0 && (
+          <div className="bg-blue-600 border-b border-blue-700 px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-white">
+                {selectedTasks.size} tarefa(s) selecionada(s)
+              </span>
+              <div className="flex items-center gap-2">
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleBulkAction("status", e.target.value);
+                      e.target.value = "";
+                    }
+                  }}
+                  className="px-3 py-1 bg-blue-700 border border-blue-600 rounded text-sm text-white focus:outline-none"
+                  defaultValue=""
+                >
+                  <option value="">Mudar status...</option>
+                  {STATUS_OPTIONS.map((status) => (
+                    <option key={status.value} value={status.value}>
+                      {status.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  onChange={(e) => {
+                    handleBulkAction("assignee", e.target.value || null);
+                    e.target.value = "";
+                  }}
+                  className="px-3 py-1 bg-blue-700 border border-blue-600 rounded text-sm text-white focus:outline-none"
+                  defaultValue=""
+                >
+                  <option value="">Atribuir pessoa...</option>
+                  <option value="">Remover atribuição</option>
+                  {users?.map((user: any) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  onChange={(e) => {
+                    handleBulkAction("sprint", e.target.value || null);
+                    e.target.value = "";
+                  }}
+                  className="px-3 py-1 bg-blue-700 border border-blue-600 rounded text-sm text-white focus:outline-none"
+                  defaultValue=""
+                >
+                  <option value="">Mover para sprint...</option>
+                  <option value="">Remover sprint</option>
+                  {sprints?.map((sprint: any) => (
+                    <option key={sprint.id} value={sprint.id}>
+                      {sprint.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => handleBulkAction("delete")}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm text-white"
+                >
+                  Deletar
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedTasks(new Set());
+                setShowBulkActions(false);
+              }}
+              className="text-white hover:text-gray-200"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Board Table */}
         <div className="flex-1 overflow-auto">
           <DndContext
@@ -1173,11 +1330,20 @@ export default function MondayBoard() {
                             : col.id === "tags"
                             ? "200px"
                             : col.id === "expand"
-                            ? "40px"
+                            ? "60px"
                             : "120px",
                       }}
                     >
-                      {col.label}
+                      {col.id === "expand" ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedTasks.size > 0 && selectedTasks.size === filteredTasks.length}
+                          onChange={(e) => handleSelectAll(e.target.checked)}
+                          className="rounded cursor-pointer"
+                        />
+                      ) : (
+                        col.label
+                      )}
                     </th>
                   ))}
                 </tr>
