@@ -41,11 +41,30 @@ export async function createSprint(req: Request, res: Response) {
   try {
     const parse = CreateSprintSchema.safeParse(req.body);
     if (!parse.success) {
-      console.error("Erro de validação ao criar sprint:", parse.error.flatten());
+      const flattened = parse.error.flatten();
+      console.error("Erro de validação ao criar sprint:", flattened);
+      console.error("Dados recebidos:", req.body);
+      
+      // Criar mensagem de erro mais amigável
+      const fieldErrors = flattened.fieldErrors;
+      const errorMessages: string[] = [];
+      
+      if (fieldErrors.name) {
+        errorMessages.push(`Nome: ${fieldErrors.name.join(", ")}`);
+      }
+      if (fieldErrors.startDate) {
+        errorMessages.push(`Data de Início: ${fieldErrors.startDate.join(", ")}`);
+      }
+      if (fieldErrors.endDate) {
+        errorMessages.push(`Data de Fim: ${fieldErrors.endDate.join(", ")}`);
+      }
+      
       return res.status(400).json({ 
         error: "Dados inválidos",
-        details: parse.error.flatten().fieldErrors,
-        message: "Verifique os campos obrigatórios: nome, data de início e data de fim"
+        message: errorMessages.length > 0 
+          ? `Erro de validação:\n${errorMessages.join("\n")}`
+          : "Verifique os campos obrigatórios: nome, data de início e data de fim",
+        details: fieldErrors
       });
     }
 

@@ -43,29 +43,59 @@ export default function Sprints() {
       
       let errorMessage = "Erro ao criar sprint. Tente novamente.";
       
-      if (error?.response?.data) {
-        const errorData = error.response.data;
-        
-        // Se houver detalhes de validação
-        if (errorData.details) {
-          const details = Object.entries(errorData.details)
-            .map(([field, errors]: [string, any]) => {
-              const fieldName = field === "name" ? "Nome" : 
-                               field === "startDate" ? "Data de Início" :
-                               field === "endDate" ? "Data de Fim" : field;
-              return `${fieldName}: ${Array.isArray(errors) ? errors.join(", ") : errors}`;
-            })
-            .join("\n");
-          errorMessage = `Erro de validação:\n${details}`;
-        } else if (errorData.message) {
-          errorMessage = errorData.message;
-        } else if (errorData.error) {
-          errorMessage = typeof errorData.error === "string" 
-            ? errorData.error 
-            : JSON.stringify(errorData.error);
+      try {
+        if (error?.response?.data) {
+          const errorData = error.response.data;
+          
+          // Se houver detalhes de validação
+          if (errorData.details) {
+            const details = Object.entries(errorData.details)
+              .map(([field, errors]: [string, any]) => {
+                const fieldName = field === "name" ? "Nome" : 
+                                 field === "startDate" ? "Data de Início" :
+                                 field === "endDate" ? "Data de Fim" : field;
+                const errorText = Array.isArray(errors) 
+                  ? errors.join(", ") 
+                  : (typeof errors === "string" ? errors : JSON.stringify(errors));
+                return `${fieldName}: ${errorText}`;
+              })
+              .join("\n");
+            errorMessage = `Erro de validação:\n${details}`;
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          } else if (errorData.error) {
+            if (typeof errorData.error === "string") {
+              errorMessage = errorData.error;
+            } else if (typeof errorData.error === "object") {
+              // Se for um objeto, tentar extrair mensagens
+              if (errorData.error.message) {
+                errorMessage = errorData.error.message;
+              } else if (errorData.error.fieldErrors) {
+                const fieldErrors = Object.entries(errorData.error.fieldErrors)
+                  .map(([field, errors]: [string, any]) => {
+                    const fieldName = field === "name" ? "Nome" : 
+                                     field === "startDate" ? "Data de Início" :
+                                     field === "endDate" ? "Data de Fim" : field;
+                    const errorText = Array.isArray(errors) 
+                      ? errors.join(", ") 
+                      : String(errors);
+                    return `${fieldName}: ${errorText}`;
+                  })
+                  .join("\n");
+                errorMessage = `Erro de validação:\n${fieldErrors}`;
+              } else {
+                errorMessage = JSON.stringify(errorData.error, null, 2);
+              }
+            } else {
+              errorMessage = String(errorData.error);
+            }
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
         }
-      } else if (error?.message) {
-        errorMessage = error.message;
+      } catch (e) {
+        console.error("Erro ao processar mensagem de erro:", e);
+        errorMessage = `Erro ao criar sprint: ${error?.message || "Erro desconhecido"}`;
       }
       
       alert(errorMessage);
