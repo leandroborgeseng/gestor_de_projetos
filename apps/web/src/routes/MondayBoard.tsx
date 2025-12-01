@@ -1264,6 +1264,30 @@ export default function MondayBoard() {
             >
               Ordenar
             </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                className="px-3 py-1 text-sm hover:bg-gray-700 rounded"
+              >
+                Exportar
+              </button>
+              {showExportMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded shadow-lg z-50">
+                  <button
+                    onClick={() => handleExport("csv")}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-t"
+                  >
+                    Exportar CSV
+                  </button>
+                  <button
+                    onClick={() => handleExport("excel")}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-b"
+                  >
+                    Exportar Excel
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
