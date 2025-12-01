@@ -1543,20 +1543,31 @@ export async function importTasksFromExcel(req: Request, res: Response) {
     }
 
     // Ler cabeçalhos (primeira linha)
-    const headers: string[] = [];
+    // Usar Map para manter a relação colNumber -> header
+    const headersMap = new Map<number, string>();
     const headerRow = worksheet.getRow(1);
     headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      headers[colNumber] = cell.value?.toString()?.trim() || "";
+      const headerValue = cell.value?.toString()?.trim() || "";
+      if (headerValue) {
+        headersMap.set(colNumber, headerValue);
+      }
     });
+    
+    // Criar array de headers para compatibilidade
+    const headers: string[] = [];
+    const maxCol = Math.max(...Array.from(headersMap.keys()));
+    for (let i = 1; i <= maxCol; i++) {
+      headers[i] = headersMap.get(i) || "";
+    }
 
     // Log das colunas encontradas para debug
     console.log("📋 Colunas encontradas no Excel:", headers.filter(h => h));
 
     // Mapear colunas do Excel para nossos campos
-    // O Monday.com exporta com nomes específicos como "Item Name", "Status", "Person", etc.
-    const columnMap: Record<string, string> = {};
+    // Usar Map para manter a relação header -> colNumber
+    const columnMap: Record<string, number> = {};
     
-    headers.forEach((header) => {
+    headersMap.forEach((header, colNumber) => {
       if (!header) return;
       
       const headerLower = header.toLowerCase().trim();
@@ -1567,14 +1578,14 @@ export async function importTasksFromExcel(req: Request, res: Response) {
           (headerLower.includes("nome") && headerLower.includes("tarefa")) ||
           (headerLower.includes("item") && headerLower.includes("name"))) {
         if (!columnMap.name) {
-          columnMap.name = header;
+          columnMap.name = colNumber;
         }
       }
       // Status
       else if (headerLower === "status" || headerLower === "estado" || 
                headerLower.includes("status")) {
         if (!columnMap.status) {
-          columnMap.status = header;
+          columnMap.status = colNumber;
         }
       }
       // Pessoa responsável
@@ -1585,7 +1596,7 @@ export async function importTasksFromExcel(req: Request, res: Response) {
                headerLower.includes("person") || headerLower.includes("people") || 
                headerLower.includes("assignee")) {
         if (!columnMap.assignee) {
-          columnMap.assignee = header;
+          columnMap.assignee = colNumber;
         }
       }
       // Data de vencimento
@@ -1594,7 +1605,7 @@ export async function importTasksFromExcel(req: Request, res: Response) {
                (headerLower.includes("due") && headerLower.includes("date")) ||
                (headerLower.includes("vencimento"))) {
         if (!columnMap.dueDate) {
-          columnMap.dueDate = header;
+          columnMap.dueDate = colNumber;
         }
       }
       // Data de início
@@ -1604,13 +1615,13 @@ export async function importTasksFromExcel(req: Request, res: Response) {
                (headerLower.includes("start") && headerLower.includes("date")) ||
                (headerLower.includes("início") || headerLower.includes("inicio"))) {
         if (!columnMap.startDate) {
-          columnMap.startDate = header;
+          columnMap.startDate = colNumber;
         }
       }
       // Data genérica
       else if (headerLower === "date" || headerLower === "data") {
         if (!columnMap.date && !columnMap.dueDate && !columnMap.startDate) {
-          columnMap.date = header;
+          columnMap.date = colNumber;
         }
       }
       // Descrição
@@ -1620,7 +1631,7 @@ export async function importTasksFromExcel(req: Request, res: Response) {
                headerLower === "observacao" || headerLower.includes("descri") ||
                headerLower.includes("notes") || headerLower.includes("description")) {
         if (!columnMap.description) {
-          columnMap.description = header;
+          columnMap.description = colNumber;
         }
       }
       // Horas estimadas
@@ -1631,19 +1642,24 @@ export async function importTasksFromExcel(req: Request, res: Response) {
                headerLower.includes("horas") || headerLower.includes("hours") ||
                headerLower.includes("estimativa")) {
         if (!columnMap.hours) {
-          columnMap.hours = header;
+          columnMap.hours = colNumber;
         }
       }
     });
 
     // Log do mapeamento para debug
-    console.log("🗺️ Mapeamento de colunas:", columnMap);
+    const columnMapDebug: Record<string, string> = {};
+    Object.keys(columnMap).forEach(key => {
+      const colNum = columnMap[key as keyof typeof columnMap];
+      columnMapDebug[key] = `${headersMap.get(colNum)} (coluna ${colNum})`;
+    });
+    console.log("🗺️ Mapeamento de colunas:", columnMapDebug);
     console.log("📊 Total de linhas na planilha:", worksheet.rowCount);
 
     if (!columnMap.name) {
       return res.status(400).json({ 
         error: "Coluna 'Nome da Tarefa' não encontrada no Excel",
-        foundColumns: headers.filter(h => h),
+        foundColumns: Array.from(headersMap.values()),
         suggestion: "O arquivo deve conter uma coluna com o nome da tarefa. Baixe o template em: /projects/import/template"
       });
     }
@@ -1744,26 +1760,20 @@ export async function importTasksFromExcel(req: Request, res: Response) {
 
     for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
       const row = worksheet.getRow(rowNumber);
-      const rowData: Record<string, any> = {};
 
-      // Ler dados da linha
-      headers.forEach((header, index) => {
-        if (header) {
-          const cell = row.getCell(index + 1);
-          // ExcelJS pode retornar diferentes tipos de valores
-          let value = cell.value;
-          
-          // Se for um objeto rich text, pegar o texto
-          if (value && typeof value === 'object' && 'richText' in value) {
-            value = value.richText.map((rt: any) => rt.text).join('');
-          }
-          
-          rowData[header] = value;
-        }
-      });
-
-      // Obter nome da tarefa
-      const taskName = rowData[columnMap.name]?.toString()?.trim();
+      // Obter nome da tarefa diretamente da coluna mapeada
+      const nameColNumber = columnMap.name;
+      if (!nameColNumber) continue;
+      
+      const nameCell = row.getCell(nameColNumber);
+      let taskNameValue = nameCell.value;
+      
+      // Se for um objeto rich text, pegar o texto
+      if (taskNameValue && typeof taskNameValue === 'object' && 'richText' in taskNameValue) {
+        taskNameValue = (taskNameValue as any).richText.map((rt: any) => rt.text).join('');
+      }
+      
+      const taskName = taskNameValue?.toString()?.trim();
       if (!taskName || taskName === "") {
         continue; // Pular linhas vazias
       }
@@ -1800,12 +1810,7 @@ export async function importTasksFromExcel(req: Request, res: Response) {
         // Mapear assignee
         let assigneeId: string | undefined = undefined;
         if (columnMap.assignee) {
-          let assigneeValue = rowData[columnMap.assignee];
-          
-          // Se for um array (múltiplas pessoas), pegar a primeira
-          if (Array.isArray(assigneeValue)) {
-            assigneeValue = assigneeValue[0];
-          }
+          let assigneeValue = getCellValue(columnMap.assignee);
           
           assigneeValue = assigneeValue?.toString()?.trim();
           
@@ -1848,21 +1853,21 @@ export async function importTasksFromExcel(req: Request, res: Response) {
         let dueDate: Date | undefined = undefined;
 
         if (columnMap.startDate) {
-          startDate = parseExcelDate(rowData[columnMap.startDate]);
+          startDate = parseExcelDate(getCellValue(columnMap.startDate));
         } else if (columnMap.date) {
-          startDate = parseExcelDate(rowData[columnMap.date]);
+          startDate = parseExcelDate(getCellValue(columnMap.date));
         }
 
         if (columnMap.dueDate) {
-          dueDate = parseExcelDate(rowData[columnMap.dueDate]);
+          dueDate = parseExcelDate(getCellValue(columnMap.dueDate));
         } else if (columnMap.date && !startDate) {
-          dueDate = parseExcelDate(rowData[columnMap.date]);
+          dueDate = parseExcelDate(getCellValue(columnMap.date));
         }
 
         // Mapear horas estimadas
         let estimateHours = 0;
         if (columnMap.hours) {
-          let hoursValue = rowData[columnMap.hours];
+          let hoursValue = getCellValue(columnMap.hours);
           
           // Se for um número do Excel, usar diretamente
           if (typeof hoursValue === "number") {
@@ -1877,12 +1882,19 @@ export async function importTasksFromExcel(req: Request, res: Response) {
           }
         }
 
+        // Mapear descrição
+        let description: string | undefined = undefined;
+        if (columnMap.description) {
+          const descValue = getCellValue(columnMap.description);
+          description = descValue?.toString()?.trim() || undefined;
+        }
+        
         // Criar tarefa
         const task = await prisma.task.create({
           data: {
             projectId: project.id,
             title: taskName,
-            description: columnMap.description ? rowData[columnMap.description]?.toString()?.trim() : undefined,
+            description,
             status,
             estimateHours,
             assigneeId,
