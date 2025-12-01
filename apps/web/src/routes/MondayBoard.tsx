@@ -1186,8 +1186,9 @@ export default function MondayBoard() {
 
           if (col.id === "progress") {
             const progress = calculateProgress(task);
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 bg-gray-700 rounded-full h-2 overflow-hidden">
                     <div
