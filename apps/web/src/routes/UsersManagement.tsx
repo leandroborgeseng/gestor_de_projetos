@@ -896,11 +896,44 @@ function EditUserModal({ user, isOpen, onClose, onSuccess }: EditUserModalProps)
       setError(null);
     },
     onError: (err: any) => {
-      setError(
-        err.response?.data?.error?.message ||
-        err.response?.data?.message ||
-        "Erro ao atualizar usuário. Tente novamente."
-      );
+      console.error("Erro ao atualizar usuário:", err);
+      console.error("Resposta completa:", err?.response?.data);
+      
+      let errorMessage = "Erro ao atualizar usuário. Tente novamente.";
+      
+      if (err?.response?.data) {
+        const errorData = err.response.data;
+        
+        // Se for um objeto de erro do Zod
+        if (errorData.error && typeof errorData.error === "object") {
+          if (errorData.error.fieldErrors) {
+            const fieldErrors = Object.entries(errorData.error.fieldErrors)
+              .map(([field, errors]: [string, any]) => {
+                const fieldName = field === "email" ? "E-mail" :
+                                 field === "name" ? "Nome" :
+                                 field === "cep" ? "CEP" :
+                                 field === "phone" ? "Telefone" :
+                                 field === "cellphone" ? "Celular" : field;
+                const errorText = Array.isArray(errors) ? errors.join(", ") : String(errors);
+                return `${fieldName}: ${errorText}`;
+              })
+              .join("\n");
+            errorMessage = `Erro de validação:\n${fieldErrors}`;
+          } else if (errorData.error.message) {
+            errorMessage = errorData.error.message;
+          } else {
+            errorMessage = JSON.stringify(errorData.error, null, 2);
+          }
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        } else if (typeof errorData.error === "string") {
+          errorMessage = errorData.error;
+        }
+      } else if (err?.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     },
   });
 
