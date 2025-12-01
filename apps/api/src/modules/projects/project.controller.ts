@@ -1217,18 +1217,19 @@ export async function downloadImportTemplate(req: Request, res: Response) {
     worksheet.addRow({ name: "- Horas estimadas devem ser números" });
     worksheet.addRow({ name: "- A coluna 'Nome da Tarefa' é obrigatória" });
 
-    // Configurar resposta
+    // Configurar resposta para Excel
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
     res.setHeader(
       "Content-Disposition",
-      "attachment; filename=template-importacao-tarefas.xlsx"
+      'attachment; filename="template-importacao-tarefas.xlsx"'
     );
 
-    await workbook.xlsx.write(res);
-    res.end();
+    // Escrever Excel no buffer e enviar
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.send(buffer);
   } catch (error) {
     handleError(error, res);
   }

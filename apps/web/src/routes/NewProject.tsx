@@ -175,7 +175,7 @@ export default function NewProject() {
                 d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
               />
             </svg>
-            Importar do Monday.com
+            Importar Projeto
           </button>
         </div>
 
@@ -330,12 +330,12 @@ export default function NewProject() {
         onClose={() => setIsTemplateSelectorOpen(false)}
       />
 
-      {/* Modal de Importação do Monday.com */}
+      {/* Modal de Importação de Projeto */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-100">Importar do Monday.com</h2>
+              <h2 className="text-2xl font-bold text-gray-100">Importar Projeto</h2>
               <button
                 onClick={() => {
                   setShowImportModal(false);
@@ -361,7 +361,7 @@ export default function NewProject() {
 
               <div>
                 <label htmlFor="excelFile" className="block text-sm font-medium text-gray-300 mb-2">
-                  Arquivo Excel do Monday.com <span className="text-red-400">*</span>
+                  Arquivo Excel <span className="text-red-400">*</span>
                 </label>
                 <input
                   id="excelFile"
@@ -372,7 +372,7 @@ export default function NewProject() {
                   className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Selecione o arquivo Excel exportado do Monday.com
+                  Selecione o arquivo Excel com as tarefas do projeto
                 </p>
               </div>
 
@@ -387,7 +387,7 @@ export default function NewProject() {
                   value={importData.projectName}
                   onChange={(e) => setImportData({ ...importData, projectName: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="Ex: Projeto Importado do Monday"
+                  placeholder="Ex: Projeto Importado"
                 />
               </div>
 
