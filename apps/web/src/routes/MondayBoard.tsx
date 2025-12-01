@@ -296,6 +296,9 @@ export default function MondayBoard() {
   const [editingCell, setEditingCell] = useState<{ taskId: string; field: "title" | "description" } | null>(null);
   const [editValue, setEditValue] = useState("");
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showAddColumn, setShowAddColumn] = useState(false);
+  const [newColumnName, setNewColumnName] = useState("");
+  const [newColumnType, setNewColumnType] = useState<ColumnType>("text");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Atalhos de teclado
@@ -1233,6 +1236,76 @@ export default function MondayBoard() {
             );
           }
 
+          // Colunas customizadas
+          if (col.id.startsWith("custom_")) {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
+            
+            // Para colunas customizadas, vamos armazenar valores em um estado local
+            // ou usar um campo genérico (por enquanto, vamos usar um campo de texto genérico)
+            const customValue = (task as any)[`custom_${col.id}`] || "";
+            
+            if (col.type === "text") {
+              return (
+                <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
+                  <input
+                    type="text"
+                    value={customValue}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      // Por enquanto, apenas logamos - em produção, salvaria em um campo customizado
+                      console.log(`Custom column ${col.id} value changed:`, e.target.value);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder={col.label}
+                    className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </td>
+              );
+            }
+            
+            if (col.type === "number") {
+              return (
+                <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
+                  <input
+                    type="number"
+                    value={customValue}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      console.log(`Custom column ${col.id} value changed:`, e.target.value);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="0"
+                    className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </td>
+              );
+            }
+            
+            if (col.type === "date") {
+              return (
+                <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
+                  <input
+                    type="date"
+                    value={customValue}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      console.log(`Custom column ${col.id} value changed:`, e.target.value);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </td>
+              );
+            }
+            
+            // Para outros tipos, renderizar como texto
+            return (
+              <td key={col.id} className="px-4 py-3 text-sm text-gray-400" style={{ width: `${columnWidth}px` }}>
+                {customValue || "-"}
+              </td>
+            );
+          }
+
           return null;
         })}
       </tr>
@@ -1403,7 +1476,7 @@ export default function MondayBoard() {
         {/* Column Settings */}
         {showColumnSettings && (
           <div className="bg-gray-800 border-b border-gray-700 px-6 py-3">
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 mb-4">
               {columns.map((col) => (
                 <label key={col.id} className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -1421,6 +1494,72 @@ export default function MondayBoard() {
                   <span className="text-sm">{col.label || col.id}</span>
                 </label>
               ))}
+            </div>
+            <div className="border-t border-gray-700 pt-3">
+              <button
+                onClick={() => setShowAddColumn(!showAddColumn)}
+                className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white"
+              >
+                + Adicionar Coluna
+              </button>
+              {showAddColumn && (
+                <div className="mt-3 flex gap-2 items-end">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Nome da Coluna</label>
+                    <input
+                      type="text"
+                      value={newColumnName}
+                      onChange={(e) => setNewColumnName(e.target.value)}
+                      placeholder="Ex: Prioridade, Custo, etc."
+                      className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Tipo</label>
+                    <select
+                      value={newColumnType}
+                      onChange={(e) => setNewColumnType(e.target.value as ColumnType)}
+                      className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="text">Texto</option>
+                      <option value="number">Número</option>
+                      <option value="date">Data</option>
+                      <option value="status">Status</option>
+                      <option value="person">Pessoa</option>
+                      <option value="tags">Tags</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (newColumnName.trim()) {
+                        const newCol: ColumnConfig = {
+                          id: `custom_${Date.now()}`,
+                          type: newColumnType,
+                          label: newColumnName.trim(),
+                          visible: true,
+                          order: columns.length,
+                        };
+                        setColumns([...columns, newCol]);
+                        setNewColumnName("");
+                        setNewColumnType("text");
+                        setShowAddColumn(false);
+                      }
+                    }}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm text-white"
+                  >
+                    Criar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAddColumn(false);
+                      setNewColumnName("");
+                    }}
+                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
