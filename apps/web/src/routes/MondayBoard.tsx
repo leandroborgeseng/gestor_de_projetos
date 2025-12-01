@@ -114,6 +114,9 @@ export default function MondayBoard() {
   const [columns, setColumns] = useState<ColumnConfig[]>(
     savedConfig?.columns || DEFAULT_COLUMNS
   );
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(
+    savedConfig?.columnWidths || {}
+  );
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -133,6 +136,7 @@ export default function MondayBoard() {
       groupBy,
       filters,
       sortConfig,
+      columnWidths,
       timestamp: Date.now(),
     };
     localStorage.setItem(`monday-board-config-${id}`, JSON.stringify(config));
@@ -144,7 +148,47 @@ export default function MondayBoard() {
       saveConfig();
     }, 500); // Debounce de 500ms
     return () => clearTimeout(timeoutId);
-  }, [columns, groupBy, filters, sortConfig, id]);
+  }, [columns, groupBy, filters, sortConfig, columnWidths, id]);
+
+  // Handlers para redimensionar colunas
+  const handleMouseDown = (columnId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizingColumn(columnId);
+
+    const startX = e.pageX;
+    const startWidth = columnWidths[columnId] || getDefaultColumnWidth(columnId);
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const diff = e.pageX - startX;
+      const newWidth = Math.max(100, startWidth + diff);
+      setColumnWidths((prev) => ({
+        ...prev,
+        [columnId]: newWidth,
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setResizingColumn(null);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const getDefaultColumnWidth = (columnId: string): number => {
+    if (columnId === "title") return 300;
+    if (columnId === "tags") return 200;
+    if (columnId === "expand") return 60;
+    if (columnId === "notes") return 250;
+    return 120;
+  };
+
+  const getColumnWidth = (columnId: string): number => {
+    return columnWidths[columnId] || getDefaultColumnWidth(columnId);
+  };
   
   // Filtros avançados
   const [filters, setFilters] = useState(savedConfig?.filters || {
@@ -1782,19 +1826,13 @@ export default function MondayBoard() {
             <table className="w-full">
               <thead className="bg-gray-800 sticky top-0 z-10">
                 <tr>
-                  {visibleColumns.map((col) => (
+                  {visibleColumns.map((col, index) => (
                     <th
                       key={col.id}
-                      className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase"
+                      className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase relative"
                       style={{
-                        minWidth:
-                          col.id === "title"
-                            ? "300px"
-                            : col.id === "tags"
-                            ? "200px"
-                            : col.id === "expand"
-                            ? "60px"
-                            : "120px",
+                        width: columnWidths[col.id] ? `${columnWidths[col.id]}px` : undefined,
+                        minWidth: `${getDefaultColumnWidth(col.id)}px`,
                       }}
                     >
                       {col.id === "expand" ? (
@@ -1806,6 +1844,14 @@ export default function MondayBoard() {
                         />
                       ) : (
                         col.label
+                      )}
+                      {index < visibleColumns.length - 1 && (
+                        <div
+                          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-500 ${
+                            resizingColumn === col.id ? "bg-blue-500" : ""
+                          }`}
+                          onMouseDown={(e) => handleMouseDown(col.id, e)}
+                        />
                       )}
                     </th>
                   ))}
