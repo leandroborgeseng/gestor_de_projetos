@@ -109,16 +109,36 @@ export default function ImportTasksModal({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <div className="mb-4">
-                <a
-                  href={`${import.meta.env.VITE_API_URL || ""}/projects/import/template`}
-                  download
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const response = await api.get("/projects/import/template", {
+                        responseType: "blob",
+                      });
+                      const blob = new Blob([response.data], {
+                        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                      });
+                      const url = window.URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = "template-importacao-tarefas.xlsx";
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      window.URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error("Erro ao baixar template:", error);
+                      alert("Erro ao baixar template. Tente novamente.");
+                    }
+                  }}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white text-sm font-medium mb-3"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   Baixar Template Excel
-                </a>
+                </button>
               </div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Arquivo Excel
