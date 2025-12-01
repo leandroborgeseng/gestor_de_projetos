@@ -1655,12 +1655,37 @@ export async function importTasksFromExcel(req: Request, res: Response) {
     });
     console.log("🗺️ Mapeamento de colunas:", columnMapDebug);
     console.log("📊 Total de linhas na planilha:", worksheet.rowCount);
+    console.log("📋 Colunas encontradas:", Array.from(headersMap.values()));
 
     if (!columnMap.name) {
       return res.status(400).json({ 
         error: "Coluna 'Nome da Tarefa' não encontrada no Excel",
         foundColumns: Array.from(headersMap.values()),
-        suggestion: "O arquivo deve conter uma coluna com o nome da tarefa. Baixe o template em: /projects/import/template"
+        suggestion: "O arquivo deve conter uma coluna com o nome da tarefa. Baixe o template em: /projects/import/template",
+        columnMapping: columnMapDebug
+      });
+    }
+    
+    // Verificar se há dados nas colunas mapeadas (verificar primeira linha de dados)
+    if (worksheet.rowCount < 2) {
+      return res.status(400).json({ 
+        error: "O arquivo Excel não contém dados. A planilha deve ter pelo menos uma linha de dados além do cabeçalho.",
+        foundColumns: Array.from(headersMap.values()),
+        columnMapping: columnMapDebug
+      });
+    }
+    
+    // Verificar se a primeira linha de dados tem conteúdo na coluna de nome
+    const firstDataRow = worksheet.getRow(2);
+    const firstNameCell = firstDataRow.getCell(columnMap.name);
+    const firstNameValue = firstNameCell.value;
+    
+    if (!firstNameValue || firstNameValue === "" || firstNameValue === null || firstNameValue === undefined) {
+      return res.status(400).json({ 
+        error: "A coluna 'Nome da Tarefa' não contém dados. Verifique se há tarefas na planilha.",
+        foundColumns: Array.from(headersMap.values()),
+        columnMapping: columnMapDebug,
+        hint: "A primeira linha de dados (linha 2) está vazia na coluna de nome da tarefa."
       });
     }
 
@@ -1758,31 +1783,55 @@ export async function importTasksFromExcel(req: Request, res: Response) {
       order = lastTask.order + 1;
     }
 
+    // Função auxiliar para ler valor de célula
+    const getCellValue = (colNumber: number | undefined, row: any): any => {
+      if (!colNumber) return undefined;
+      const cell = row.getCell(colNumber);
+      let value = cell.value;
+      
+      // Se a célula estiver vazia, retornar undefined
+      if (value === null || value === undefined || value === "") {
+        return undefined;
+      }
+      
+      // Se for um objeto rich text, pegar o texto
+      if (value && typeof value === 'object' && 'richText' in value) {
+        value = (value as any).richText.map((rt: any) => rt.text).join('');
+      }
+      
+      // Se for um array, pegar o primeiro elemento
+      if (Array.isArray(value)) {
+        value = value[0];
+      }
+      
+      return value;
+    };
+
     for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
       const row = worksheet.getRow(rowNumber);
 
       // Obter nome da tarefa diretamente da coluna mapeada
       const nameColNumber = columnMap.name;
-      if (!nameColNumber) continue;
-      
-      const nameCell = row.getCell(nameColNumber);
-      let taskNameValue = nameCell.value;
-      
-      // Se for um objeto rich text, pegar o texto
-      if (taskNameValue && typeof taskNameValue === 'object' && 'richText' in taskNameValue) {
-        taskNameValue = (taskNameValue as any).richText.map((rt: any) => rt.text).join('');
+      if (!nameColNumber) {
+        console.log(`⚠️ Linha ${rowNumber}: Coluna de nome não mapeada, pulando...`);
+        continue;
       }
       
+      const taskNameValue = getCellValue(nameColNumber, row);
       const taskName = taskNameValue?.toString()?.trim();
-      if (!taskName || taskName === "") {
+      
+      if (!taskName || taskName === "" || taskName === "undefined" || taskName === "null") {
+        console.log(`⚠️ Linha ${rowNumber}: Nome da tarefa vazio, pulando...`);
         continue; // Pular linhas vazias
       }
+
+      console.log(`📝 Processando linha ${rowNumber}: "${taskName}"`);
 
       try {
         // Mapear status
         let status: TaskStatus = "BACKLOG";
         if (columnMap.status) {
-          const statusValue = rowData[columnMap.status]?.toString()?.toLowerCase().trim() || "";
+          const statusValue = getCellValue(columnMap.status, row)?.toString()?.toLowerCase().trim() || "";
           // Tentar mapear status
           status = statusMap[statusValue] || "BACKLOG";
           
@@ -1810,7 +1859,7 @@ export async function importTasksFromExcel(req: Request, res: Response) {
         // Mapear assignee
         let assigneeId: string | undefined = undefined;
         if (columnMap.assignee) {
-          let assigneeValue = getCellValue(columnMap.assignee);
+          let assigneeValue = getCellValue(columnMap.assignee, row);
           
           assigneeValue = assigneeValue?.toString()?.trim();
           
@@ -1853,21 +1902,21 @@ export async function importTasksFromExcel(req: Request, res: Response) {
         let dueDate: Date | undefined = undefined;
 
         if (columnMap.startDate) {
-          startDate = parseExcelDate(getCellValue(columnMap.startDate));
+          startDate = parseExcelDate(getCellValue(columnMap.startDate, row));
         } else if (columnMap.date) {
-          startDate = parseExcelDate(getCellValue(columnMap.date));
+          startDate = parseExcelDate(getCellValue(columnMap.date, row));
         }
 
         if (columnMap.dueDate) {
-          dueDate = parseExcelDate(getCellValue(columnMap.dueDate));
+          dueDate = parseExcelDate(getCellValue(columnMap.dueDate, row));
         } else if (columnMap.date && !startDate) {
-          dueDate = parseExcelDate(getCellValue(columnMap.date));
+          dueDate = parseExcelDate(getCellValue(columnMap.date, row));
         }
 
         // Mapear horas estimadas
         let estimateHours = 0;
         if (columnMap.hours) {
-          let hoursValue = getCellValue(columnMap.hours);
+          let hoursValue = getCellValue(columnMap.hours, row);
           
           // Se for um número do Excel, usar diretamente
           if (typeof hoursValue === "number") {
@@ -1885,7 +1934,7 @@ export async function importTasksFromExcel(req: Request, res: Response) {
         // Mapear descrição
         let description: string | undefined = undefined;
         if (columnMap.description) {
-          const descValue = getCellValue(columnMap.description);
+          const descValue = getCellValue(columnMap.description, row);
           description = descValue?.toString()?.trim() || undefined;
         }
         
