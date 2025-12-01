@@ -110,7 +110,7 @@ export default function ImportTasksModal({
             <div>
               <div className="mb-4">
                 <a
-                  href="/api/projects/import/template"
+                  href={`${import.meta.env.VITE_API_URL || ""}/projects/import/template`}
                   download
                   className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white text-sm font-medium mb-3"
                 >
