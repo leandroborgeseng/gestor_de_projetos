@@ -20,14 +20,44 @@ api.interceptors.request.use((config) => {
     config.headers["X-Company-Id"] = activeCompanyId;
   }
 
+  // Log para debug (apenas em desenvolvimento ou para login)
+  if (config.url?.includes("/auth/login")) {
+    console.log("📤 Requisição de login:", {
+      url: config.url,
+      baseURL: config.baseURL,
+      fullURL: `${config.baseURL}${config.url}`,
+      method: config.method,
+    });
+  }
+
   return config;
 });
 
 // Response interceptor to handle token refresh
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Log para debug (apenas para login)
+    if (response.config.url?.includes("/auth/login")) {
+      console.log("📥 Resposta de login recebida:", {
+        status: response.status,
+        hasData: !!response.data,
+        hasToken: !!response.data?.accessToken,
+      });
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
+    
+    // Log de erro para debug
+    if (originalRequest?.url?.includes("/auth/login")) {
+      console.error("❌ Erro na resposta de login:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+      });
+    }
 
     // Não tentar refresh em rotas de autenticação (login, register)
     const isAuthRoute = originalRequest?.url?.includes("/auth/login") || 
