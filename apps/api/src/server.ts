@@ -33,6 +33,7 @@ import { router as calendarRoutes } from "./modules/calendar/calendar.routes.js"
 import { router as companyRoutes } from "./modules/companies/company.routes.js";
 import { setupSwagger } from "./config/swagger.js";
 import { generalLimiter } from "./middleware/rateLimiter.js";
+import { getPublicProjectReport } from "./modules/projects/project.controller.js";
 
 export const app = express();
 
@@ -77,6 +78,9 @@ app.use((req, _res, next) => {
 
 // Servir arquivos estáticos de uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
+// Rotas públicas (antes do authMiddleware)
+app.get("/public/project/:token", getPublicProjectReport);
 
 app.use("/auth", authRoutes);
 app.use("/users", userRoutes);

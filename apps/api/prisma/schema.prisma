@@ -81,6 +81,7 @@ model Project {
   archived          Boolean         @default(false)
   companyId         String
   ownerId           String
+  publicReportToken String?         @unique // Token único para acesso público ao relatório
   owner             User            @relation("ProjectOwner", fields: [ownerId], references: [id])
   company           Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   members           ProjectMember[]
@@ -93,6 +94,7 @@ model Project {
   updatedAt         DateTime        @updatedAt
 
   @@index([companyId])
+  @@index([publicReportToken])
 }
 
 model KanbanColumn {

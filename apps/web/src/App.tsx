@@ -22,6 +22,7 @@ import TagsManagement from "./routes/TagsManagement.js";
 import Analytics from "./routes/Analytics.js";
 import Protected from "./routes/Protected.js";
 import CompaniesManagement from "./routes/CompaniesManagement.js";
+import PublicProjectReport from "./routes/PublicProjectReport.js";
 import ErrorPage from "./components/ErrorPage.js";
 import PWAInstallPrompt from "./components/PWAInstallPrompt.js";
 import OfflineIndicator from "./components/OfflineIndicator.js";
@@ -30,6 +31,11 @@ const router = createBrowserRouter([
   { 
     path: "/login", 
     element: <Login />,
+    errorElement: <ErrorPage />,
+  },
+  {
+    path: "/public/project/:token",
+    element: <PublicProjectReport />,
     errorElement: <ErrorPage />,
   },
   {

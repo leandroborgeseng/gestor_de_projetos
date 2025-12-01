@@ -12,8 +12,11 @@ import {
   unarchiveProject,
   cloneProject,
   importFromMondayExcel,
-  importTasksFromMondayExcel,
+  importTasksFromExcel,
   inspectMondayExcel,
+  downloadImportTemplate,
+  generatePublicReportTokenEndpoint,
+  getPublicProjectReport,
 } from "./project.controller.js";
 import {
   getProjectMembers,
@@ -351,7 +354,48 @@ router.post("/:id/clone", cloneProject);
  *       400:
  *         description: Dados inválidos ou arquivo inválido
  */
-router.post("/:projectId/import/tasks", uploadLimiter, upload.single("file"), importTasksFromMondayExcel);
+router.post("/:projectId/import/tasks", uploadLimiter, upload.single("file"), importTasksFromExcel);
+
+/**
+ * @swagger
+ * /projects/import/template:
+ *   get:
+ *     summary: Download de template Excel para importação de tarefas
+ *     tags: [Projects]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Arquivo Excel template
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
+router.get("/import/template", downloadImportTemplate);
+
+/**
+ * @swagger
+ * /projects/{id}/public-report-token:
+ *   post:
+ *     summary: Gerar ou regenerar token de acesso público ao relatório
+ *     tags: [Projects]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Token gerado com sucesso
+ *       404:
+ *         description: Projeto não encontrado
+ */
+router.post("/:projectId/public-report-token", generatePublicReportTokenEndpoint);
 
 /**
  * @swagger

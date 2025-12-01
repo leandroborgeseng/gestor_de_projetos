@@ -10,6 +10,7 @@ import { WEBHOOK_EVENTS } from "../webhooks/webhook.model.js";
 import ExcelJS from "exceljs";
 import { getFilePath } from "../../config/upload.js";
 import { TaskStatus } from "@prisma/client";
+import crypto from "crypto";
 
 function effectiveRate(t: any): number {
   if (t.hourlyRateOverride) return Number(t.hourlyRateOverride);
@@ -1081,9 +1082,349 @@ export async function importFromMondayExcel(req: Request, res: Response) {
 }
 
 /**
- * Importa tarefas de um arquivo Excel exportado do Monday.com para um projeto existente
+ * Gera um token único para acesso público ao relatório do projeto
  */
-export async function importTasksFromMondayExcel(req: Request, res: Response) {
+function generatePublicReportToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+/**
+ * Download de template Excel para importação de tarefas
+ */
+export async function downloadImportTemplate(req: Request, res: Response) {
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Tarefas");
+
+    // Definir cabeçalhos
+    worksheet.columns = [
+      { header: "Nome da Tarefa", key: "name", width: 40 },
+      { header: "Status", key: "status", width: 15 },
+      { header: "Responsável", key: "assignee", width: 25 },
+      { header: "Data de Início", key: "startDate", width: 15 },
+      { header: "Data de Vencimento", key: "dueDate", width: 18 },
+      { header: "Horas Estimadas", key: "estimateHours", width: 15 },
+      { header: "Descrição", key: "description", width: 50 },
+    ];
+
+    // Estilizar cabeçalhos
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE0E0E0" },
+    };
+
+    // Adicionar linhas de exemplo
+    worksheet.addRow({
+      name: "Exemplo de tarefa 1",
+      status: "TODO",
+      assignee: "Nome do responsável ou email",
+      startDate: "2024-01-15",
+      dueDate: "2024-01-30",
+      estimateHours: 8,
+      description: "Descrição detalhada da tarefa",
+    });
+
+    worksheet.addRow({
+      name: "Exemplo de tarefa 2",
+      status: "IN_PROGRESS",
+      assignee: "outro@email.com",
+      startDate: "2024-01-20",
+      dueDate: "2024-02-05",
+      estimateHours: 16,
+      description: "Outra descrição",
+    });
+
+    // Adicionar nota explicativa
+    worksheet.addRow({});
+    worksheet.addRow({ name: "NOTAS:" });
+    worksheet.addRow({ name: "- Status válidos: BACKLOG, TODO, IN_PROGRESS, REVIEW, DONE, BLOCKED" });
+    worksheet.addRow({ name: "- Responsável pode ser nome ou email do usuário" });
+    worksheet.addRow({ name: "- Datas no formato: YYYY-MM-DD ou DD/MM/YYYY" });
+    worksheet.addRow({ name: "- Horas estimadas devem ser números" });
+    worksheet.addRow({ name: "- A coluna 'Nome da Tarefa' é obrigatória" });
+
+    // Configurar resposta
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=template-importacao-tarefas.xlsx"
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    handleError(error, res);
+  }
+}
+
+/**
+ * Gera ou regenera token de acesso público ao relatório do projeto
+ */
+export async function generatePublicReportTokenEndpoint(req: Request, res: Response) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
+    const { projectId } = req.params;
+    if (!projectId) {
+      return res.status(400).json({ error: "ID do projeto é obrigatório" });
+    }
+
+    // Verificar se o projeto existe e pertence à empresa
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        companyId,
+      },
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: "Projeto não encontrado" });
+    }
+
+    // Gerar novo token
+    const token = generatePublicReportToken();
+
+    // Atualizar projeto com o token
+    const updatedProject = await prisma.project.update({
+      where: { id: projectId },
+      data: { publicReportToken: token },
+    });
+
+    res.json({
+      token,
+      publicUrl: `${process.env.FRONTEND_URL || "http://localhost:3000"}/public/project/${token}`,
+      message: "Token gerado com sucesso",
+    });
+  } catch (error) {
+    handleError(error, res);
+  }
+}
+
+/**
+ * Relatório público do projeto (acesso via token)
+ */
+export async function getPublicProjectReport(req: Request, res: Response) {
+  try {
+    const { token } = req.params;
+
+    if (!token) {
+      return res.status(400).json({ error: "Token é obrigatório" });
+    }
+
+    // Buscar projeto pelo token
+    const project = await prisma.project.findUnique({
+      where: { publicReportToken: token },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            logoUrl: true,
+            primaryColor: true,
+            secondaryColor: true,
+          },
+        },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        tasks: {
+          include: {
+            assignee: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            tags: {
+              include: {
+                tag: {
+                  select: {
+                    id: true,
+                    name: true,
+                    color: true,
+                  },
+                },
+              },
+            },
+            sprint: {
+              select: {
+                id: true,
+                name: true,
+                startDate: true,
+                endDate: true,
+              },
+            },
+          },
+          orderBy: [
+            { order: "asc" },
+            { createdAt: "asc" },
+          ],
+        },
+        sprints: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true,
+            goal: true,
+          },
+          orderBy: { startDate: "desc" },
+        },
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: "Projeto não encontrado ou token inválido" });
+    }
+
+    // Calcular estatísticas
+    const totalTasks = project.tasks.length;
+    const tasksByStatus = {
+      BACKLOG: project.tasks.filter((t) => t.status === "BACKLOG").length,
+      TODO: project.tasks.filter((t) => t.status === "TODO").length,
+      IN_PROGRESS: project.tasks.filter((t) => t.status === "IN_PROGRESS").length,
+      REVIEW: project.tasks.filter((t) => t.status === "REVIEW").length,
+      DONE: project.tasks.filter((t) => t.status === "DONE").length,
+      BLOCKED: project.tasks.filter((t) => t.status === "BLOCKED").length,
+    };
+
+    const completedTasks = tasksByStatus.DONE;
+    const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+    // Calcular horas
+    const totalEstimateHours = project.tasks.reduce(
+      (sum, t) => sum + (Number(t.estimateHours) || 0),
+      0
+    );
+    const totalActualHours = project.tasks.reduce(
+      (sum, t) => sum + (Number(t.actualHours) || 0),
+      0
+    );
+
+    // Tarefas por responsável
+    const tasksByAssignee = project.tasks.reduce((acc, task) => {
+      const assigneeId = task.assigneeId || "unassigned";
+      const assigneeName = task.assignee?.name || "Sem responsável";
+      if (!acc[assigneeId]) {
+        acc[assigneeId] = {
+          id: assigneeId,
+          name: assigneeName,
+          email: task.assignee?.email,
+          total: 0,
+          completed: 0,
+          inProgress: 0,
+          hours: 0,
+        };
+      }
+      acc[assigneeId].total++;
+      if (task.status === "DONE") acc[assigneeId].completed++;
+      if (task.status === "IN_PROGRESS") acc[assigneeId].inProgress++;
+      acc[assigneeId].hours += Number(task.estimateHours) || 0;
+      return acc;
+    }, {} as Record<string, any>);
+
+    // Tarefas atrasadas
+    const now = new Date();
+    const overdueTasks = project.tasks.filter(
+      (t) => t.dueDate && new Date(t.dueDate) < now && t.status !== "DONE"
+    );
+
+    // Próximas tarefas a vencer (próximos 7 dias)
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const upcomingTasks = project.tasks.filter(
+      (t) =>
+        t.dueDate &&
+        new Date(t.dueDate) >= now &&
+        new Date(t.dueDate) <= nextWeek &&
+        t.status !== "DONE"
+    );
+
+    res.json({
+      project: {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      },
+      company: project.company,
+      owner: project.owner,
+      statistics: {
+        totalTasks,
+        tasksByStatus,
+        completionPercentage,
+        totalEstimateHours,
+        totalActualHours,
+        overdueTasks: overdueTasks.length,
+        upcomingTasks: upcomingTasks.length,
+      },
+      tasksByAssignee: Object.values(tasksByAssignee),
+      tasks: project.tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        assignee: task.assignee,
+        startDate: task.startDate,
+        dueDate: task.dueDate,
+        estimateHours: task.estimateHours,
+        actualHours: task.actualHours,
+        progress: task.progress,
+        tags: task.tags.map((tt) => tt.tag),
+        sprint: task.sprint,
+        order: task.order,
+        isOverdue: task.dueDate && new Date(task.dueDate) < now && task.status !== "DONE",
+      })),
+      sprints: project.sprints,
+      members: project.members.map((m) => m.user),
+      overdueTasks: overdueTasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        dueDate: t.dueDate,
+        assignee: t.assignee,
+        status: t.status,
+      })),
+      upcomingTasks: upcomingTasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        dueDate: t.dueDate,
+        assignee: t.assignee,
+        status: t.status,
+      })),
+    });
+  } catch (error) {
+    handleError(error, res);
+  }
+}
+
+/**
+ * Importa tarefas de um arquivo Excel para um projeto existente
+ */
+export async function importTasksFromExcel(req: Request, res: Response) {
   try {
     const companyId = req.companyId;
     if (!companyId) {
@@ -1138,7 +1479,7 @@ export async function importTasksFromMondayExcel(req: Request, res: Response) {
     // Log das colunas encontradas para debug
     console.log("📋 Colunas encontradas no Excel:", headers.filter(h => h));
 
-    // Mapear colunas do Monday.com para nossos campos
+    // Mapear colunas do Excel para nossos campos
     // O Monday.com exporta com nomes específicos como "Item Name", "Status", "Person", etc.
     const columnMap: Record<string, string> = {};
     
@@ -1147,41 +1488,48 @@ export async function importTasksFromMondayExcel(req: Request, res: Response) {
       
       const headerLower = header.toLowerCase().trim();
       
-      // Nome da tarefa - Monday.com usa "Item Name" ou "Name"
-      if (headerLower === "item name" || headerLower === "name" || headerLower === "nome" || 
-          headerLower.includes("item") && headerLower.includes("name")) {
+      // Nome da tarefa
+      if (headerLower === "nome da tarefa" || headerLower === "name" || headerLower === "nome" || 
+          headerLower === "item name" || headerLower === "tarefa" ||
+          (headerLower.includes("nome") && headerLower.includes("tarefa")) ||
+          (headerLower.includes("item") && headerLower.includes("name"))) {
         if (!columnMap.name) {
           columnMap.name = header;
         }
       }
-      // Status - Monday.com usa "Status" ou "Status Column"
+      // Status
       else if (headerLower === "status" || headerLower === "estado" || 
                headerLower.includes("status")) {
         if (!columnMap.status) {
           columnMap.status = header;
         }
       }
-      // Pessoa responsável - Monday.com usa "Person" ou "People"
-      else if (headerLower === "person" || headerLower === "people" || 
-               headerLower === "assignee" || headerLower === "responsável" || 
-               headerLower === "responsavel" || headerLower.includes("person") ||
-               headerLower.includes("people") || headerLower.includes("assignee")) {
+      // Pessoa responsável
+      else if (headerLower === "responsável" || headerLower === "responsavel" ||
+               headerLower === "person" || headerLower === "people" || 
+               headerLower === "assignee" || headerLower === "atribuído" ||
+               headerLower === "atribuido" || headerLower.includes("respons") ||
+               headerLower.includes("person") || headerLower.includes("people") || 
+               headerLower.includes("assignee")) {
         if (!columnMap.assignee) {
           columnMap.assignee = header;
         }
       }
-      // Data de vencimento - Monday.com usa "Date" ou "Due Date"
-      else if (headerLower === "due date" || headerLower === "prazo" || 
-               headerLower === "vencimento" || 
-               (headerLower.includes("due") && headerLower.includes("date"))) {
+      // Data de vencimento
+      else if (headerLower === "data de vencimento" || headerLower === "due date" || 
+               headerLower === "prazo" || headerLower === "vencimento" || 
+               (headerLower.includes("due") && headerLower.includes("date")) ||
+               (headerLower.includes("vencimento"))) {
         if (!columnMap.dueDate) {
           columnMap.dueDate = header;
         }
       }
-      // Data de início - Monday.com usa "Start Date"
-      else if (headerLower === "start date" || headerLower === "data de início" ||
-               headerLower === "data de inicio" ||
-               (headerLower.includes("start") && headerLower.includes("date"))) {
+      // Data de início
+      else if (headerLower === "data de início" || headerLower === "data de inicio" ||
+               headerLower === "start date" || headerLower === "início" ||
+               headerLower === "inicio" ||
+               (headerLower.includes("start") && headerLower.includes("date")) ||
+               (headerLower.includes("início") || headerLower.includes("inicio"))) {
         if (!columnMap.startDate) {
           columnMap.startDate = header;
         }
@@ -1192,21 +1540,23 @@ export async function importTasksFromMondayExcel(req: Request, res: Response) {
           columnMap.date = header;
         }
       }
-      // Descrição - Monday.com usa "Notes" ou "Description"
-      else if (headerLower === "notes" || headerLower === "note" ||
-               headerLower === "description" || headerLower === "descrição" ||
-               headerLower === "descricao" || headerLower === "observação" ||
-               headerLower === "observacao" || headerLower.includes("notes") ||
-               headerLower.includes("description")) {
+      // Descrição
+      else if (headerLower === "descrição" || headerLower === "descricao" ||
+               headerLower === "description" || headerLower === "notes" || 
+               headerLower === "note" || headerLower === "observação" ||
+               headerLower === "observacao" || headerLower.includes("descri") ||
+               headerLower.includes("notes") || headerLower.includes("description")) {
         if (!columnMap.description) {
           columnMap.description = header;
         }
       }
-      // Horas - Monday.com pode usar "Numbers" ou "Hours"
-      else if (headerLower === "hours" || headerLower === "horas" ||
-               headerLower === "numbers" || headerLower === "números" ||
-               headerLower === "numeros" || headerLower === "estimativa" ||
-               headerLower.includes("hours") || headerLower.includes("numbers")) {
+      // Horas estimadas
+      else if (headerLower === "horas estimadas" || headerLower === "hours" || 
+               headerLower === "horas" || headerLower === "estimativa" ||
+               headerLower === "estimate hours" || headerLower === "numbers" ||
+               headerLower === "números" || headerLower === "numeros" ||
+               headerLower.includes("horas") || headerLower.includes("hours") ||
+               headerLower.includes("estimativa")) {
         if (!columnMap.hours) {
           columnMap.hours = header;
         }
@@ -1219,9 +1569,9 @@ export async function importTasksFromMondayExcel(req: Request, res: Response) {
 
     if (!columnMap.name) {
       return res.status(400).json({ 
-        error: "Coluna 'Name' ou 'Item Name' não encontrada no Excel",
+        error: "Coluna 'Nome da Tarefa' não encontrada no Excel",
         foundColumns: headers.filter(h => h),
-        suggestion: "O arquivo deve conter uma coluna com o nome da tarefa (ex: 'Item Name', 'Name', 'Nome')"
+        suggestion: "O arquivo deve conter uma coluna com o nome da tarefa. Baixe o template em: /projects/import/template"
       });
     }
 

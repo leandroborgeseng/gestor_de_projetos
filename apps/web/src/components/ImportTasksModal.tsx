@@ -94,7 +94,7 @@ export default function ImportTasksModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-white">Importar Tarefas do Monday.com</h2>
+          <h2 className="text-2xl font-bold text-white">Importar Tarefas</h2>
           <button
             onClick={handleClose}
             className="text-gray-400 hover:text-white"
@@ -108,8 +108,20 @@ export default function ImportTasksModal({
         {!importResult ? (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
+              <div className="mb-4">
+                <a
+                  href="/api/projects/import/template"
+                  download
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white text-sm font-medium mb-3"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Baixar Template Excel
+                </a>
+              </div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Arquivo Excel do Monday.com
+                Arquivo Excel
               </label>
               <input
                 type="file"
@@ -119,7 +131,7 @@ export default function ImportTasksModal({
                 required
               />
               <p className="mt-2 text-sm text-gray-400">
-                Selecione o arquivo Excel exportado do Monday.com. O sistema irá mapear automaticamente as colunas.
+                Selecione o arquivo Excel preenchido com as tarefas. Use o template acima como referência.
               </p>
             </div>
 
