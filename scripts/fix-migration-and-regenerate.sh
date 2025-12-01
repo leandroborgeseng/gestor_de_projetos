@@ -37,11 +37,29 @@ if [ -z "$DB_URL" ]; then
     exit 1
 fi
 
-echo -e "${YELLOW}1️⃣ Executando migrations...${NC}"
+echo -e "${YELLOW}1️⃣ Verificando localização do schema...${NC}"
+
+# Verificar onde está o schema
+SCHEMA_PATH=""
+if docker exec agilepm-api sh -c "test -f /app/prisma/schema.prisma" 2>/dev/null; then
+    SCHEMA_PATH="/app/prisma/schema.prisma"
+elif docker exec agilepm-api sh -c "test -f /app/apps/api/prisma/schema.prisma" 2>/dev/null; then
+    SCHEMA_PATH="/app/apps/api/prisma/schema.prisma"
+else
+    echo -e "${RED}❌ Schema do Prisma não encontrado!${NC}"
+    echo -e "${YELLOW}📋 Verificando estrutura do container...${NC}"
+    docker exec agilepm-api sh -c "find /app -name schema.prisma 2>/dev/null | head -5"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Schema encontrado em: $SCHEMA_PATH${NC}"
+echo ""
+
+echo -e "${YELLOW}2️⃣ Executando migrations...${NC}"
 
 # Executar migrations
-docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma" || \
-docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' prisma migrate deploy --schema=apps/api/prisma/schema.prisma" || {
+docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma migrate deploy --schema=$SCHEMA_PATH" || \
+docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' prisma migrate deploy --schema=$SCHEMA_PATH" || {
     echo -e "${RED}❌ Erro ao executar migrations${NC}"
     exit 1
 }
@@ -49,11 +67,11 @@ docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' prisma migrate 
 echo -e "${GREEN}✅ Migrations executadas!${NC}"
 echo ""
 
-echo -e "${YELLOW}2️⃣ Regenerando Prisma Client...${NC}"
+echo -e "${YELLOW}3️⃣ Regenerando Prisma Client...${NC}"
 
 # Regenerar Prisma Client
-docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma generate --schema=apps/api/prisma/schema.prisma" || \
-docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' prisma generate --schema=apps/api/prisma/schema.prisma" || {
+docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma generate --schema=$SCHEMA_PATH" || \
+docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' prisma generate --schema=$SCHEMA_PATH" || {
     echo -e "${RED}❌ Erro ao regenerar Prisma Client${NC}"
     exit 1
 }
@@ -61,7 +79,7 @@ docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' prisma generate
 echo -e "${GREEN}✅ Prisma Client regenerado!${NC}"
 echo ""
 
-echo -e "${YELLOW}3️⃣ Reiniciando container da API...${NC}"
+echo -e "${YELLOW}4️⃣ Reiniciando container da API...${NC}"
 
 # Reiniciar container para carregar novo Prisma Client
 docker restart agilepm-api
