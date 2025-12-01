@@ -37,6 +37,11 @@ export default function Sprints() {
       setShowForm(false);
       setFormData({ name: "", goal: "", startDate: "", endDate: "" });
     },
+    onError: (error: any) => {
+      console.error("Erro ao criar sprint:", error);
+      const errorMessage = error?.response?.data?.error || error?.message || "Erro ao criar sprint. Tente novamente.";
+      alert(errorMessage);
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -142,12 +147,20 @@ export default function Sprints() {
               />
             </div>
           </div>
-          <button
-            type="submit"
-            className="mt-4 px-4 py-2 bg-indigo-700 text-white rounded-md hover:bg-indigo-600"
-          >
-            Criar Sprint
-          </button>
+          <div className="flex gap-2 mt-4">
+            <button
+              type="submit"
+              disabled={createSprintMutation.isPending}
+              className="px-4 py-2 bg-indigo-700 text-white rounded-md hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {createSprintMutation.isPending ? "Criando..." : "Criar Sprint"}
+            </button>
+            {createSprintMutation.isError && (
+              <span className="text-red-400 text-sm self-center">
+                Erro ao criar sprint. Verifique os dados e tente novamente.
+              </span>
+            )}
+          </div>
         </form>
       )}
 
