@@ -52,6 +52,73 @@ async function upsertMembership(userId: string, companyId: string, role: Company
 }
 
 async function buildCompanyContext(userId: string) {
+  // Verificar se o usuário é superadmin
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+
+  const isSuperAdmin = user?.role === "SUPERADMIN";
+
+  // Se for superadmin, retornar todas as empresas
+  if (isSuperAdmin) {
+    const allCompanies = await prisma.company.findMany({
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        plan: true,
+        isActive: true,
+        maxUsers: true,
+        maxProjects: true,
+        maxStorageMb: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
+        backgroundColor: true,
+        logoUrl: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    // Verificar memberships existentes para manter o role correto
+    const memberships = await prisma.companyUser.findMany({
+      where: { userId },
+      select: { companyId: true, role: true },
+    });
+
+    const membershipMap = new Map(
+      memberships.map((m) => [m.companyId, m.role])
+    );
+
+    const companies = allCompanies.map((company) => ({
+      id: company.id,
+      name: company.name,
+      slug: company.slug,
+      plan: company.plan,
+      isActive: company.isActive,
+      maxUsers: company.maxUsers,
+      maxProjects: company.maxProjects,
+      maxStorageMb: company.maxStorageMb,
+      role: (membershipMap.get(company.id) as CompanyUserRole) || CompanyUserRole.ADMIN, // Default ADMIN para superadmin
+      primaryColor: company.primaryColor,
+      secondaryColor: company.secondaryColor,
+      accentColor: company.accentColor,
+      backgroundColor: company.backgroundColor,
+      logoUrl: company.logoUrl,
+    }));
+
+    const tokenCompanies = allCompanies.map((company) => ({
+      companyId: company.id,
+      role: (membershipMap.get(company.id) as CompanyUserRole) || CompanyUserRole.ADMIN,
+    }));
+
+    const activeCompanyId = companies.find((company) => company.isActive)?.id || companies[0]?.id;
+
+    return { companies, tokenCompanies, activeCompanyId };
+  }
+
+  // Para usuários normais, retornar apenas empresas onde tem membership
   const memberships = await prisma.companyUser.findMany({
      where: { userId },
      include: {
