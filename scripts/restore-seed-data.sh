@@ -29,7 +29,7 @@ if ! docker ps | grep -q agilepm-api; then
     fi
 fi
 
-echo -e "${YELLOW}1️⃣ Executando seed do banco de dados...${NC}"
+echo -e "${YELLOW}1️⃣ Executando migrations do banco de dados...${NC}"
 
 # Obter DATABASE_URL
 DB_URL=$(docker exec agilepm-api sh -c 'echo "$DATABASE_URL"' 2>/dev/null || echo "")
@@ -38,6 +38,21 @@ if [ -z "$DB_URL" ]; then
     echo -e "${RED}❌ DATABASE_URL não está definida no container${NC}"
     exit 1
 fi
+
+# Executar migrations
+docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma migrate deploy"
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo -e "${RED}❌ Falha ao executar migrations${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Migrations executadas com sucesso!${NC}"
+echo ""
+
+echo -e "${YELLOW}2️⃣ Executando seed do banco de dados...${NC}"
 
 # Executar seed
 docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' tsx prisma/seed.ts"
