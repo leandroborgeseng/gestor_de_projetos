@@ -37,6 +37,9 @@ interface Task {
   dueDate?: string;
   subtasks?: Task[];
   tags?: Array<{ id: string; tag: { id: string; name: string; color: string } }>;
+  resourceId?: string;
+  resource?: { id: string; name: string };
+  notes?: string; // Observação/notas
 }
 
 interface Project {
@@ -69,10 +72,14 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: "title", type: "text", label: "Elemento", visible: true, order: 1 },
   { id: "status", type: "status", label: "Status", visible: true, order: 2 },
   { id: "assignee", type: "person", label: "Pessoa", visible: true, order: 3 },
-  { id: "dueDate", type: "date", label: "Data", visible: true, order: 4 },
-  { id: "estimateHours", type: "number", label: "Estimativa", visible: true, order: 5 },
-  { id: "actualHours", type: "number", label: "Realizado", visible: true, order: 6 },
-  { id: "tags", type: "tags", label: "Tags", visible: true, order: 7 },
+  { id: "startDate", type: "date", label: "Data de Início", visible: false, order: 4 },
+  { id: "dueDate", type: "date", label: "Data de Vencimento", visible: true, order: 5 },
+  { id: "sprint", type: "text", label: "Sprint", visible: false, order: 6 },
+  { id: "resource", type: "text", label: "Recurso", visible: false, order: 7 },
+  { id: "notes", type: "text", label: "Observação", visible: false, order: 8 },
+  { id: "estimateHours", type: "number", label: "Estimativa", visible: true, order: 9 },
+  { id: "actualHours", type: "number", label: "Realizado", visible: true, order: 10 },
+  { id: "tags", type: "tags", label: "Tags", visible: true, order: 11 },
 ];
 
 type GroupBy = "none" | "status" | "assignee" | "sprint";
@@ -192,6 +199,12 @@ export default function MondayBoard() {
   const { data: sprints } = useQuery({
     queryKey: ["sprints", id],
     queryFn: () => api.get(`/projects/${id}/sprints`).then((res) => res.data || []),
+    enabled: !!id,
+  });
+
+  const { data: resources } = useQuery({
+    queryKey: ["resources", id],
+    queryFn: () => api.get(`/resources?companyId=${id}`).then((res) => res.data.data || []),
     enabled: !!id,
   });
 
@@ -441,6 +454,27 @@ export default function MondayBoard() {
     updateTaskMutation.mutate({
       taskId,
       data: { [field]: value || null },
+    });
+  };
+
+  const handleTextChange = (taskId: string, field: string, value: string) => {
+    updateTaskMutation.mutate({
+      taskId,
+      data: { [field]: value || null },
+    });
+  };
+
+  const handleResourceChange = (taskId: string, resourceId: string | null) => {
+    updateTaskMutation.mutate({
+      taskId,
+      data: { resourceId },
+    });
+  };
+
+  const handleSprintChange = (taskId: string, sprintId: string | null) => {
+    updateTaskMutation.mutate({
+      taskId,
+      data: { sprintId },
     });
   };
 
@@ -702,6 +736,23 @@ export default function MondayBoard() {
             );
           }
 
+          if (col.id === "startDate") {
+            return (
+              <td key={col.id} className="px-4 py-3">
+                <input
+                  type="date"
+                  value={task.startDate ? task.startDate.split("T")[0] : ""}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleDateChange(task.id, "startDate", e.target.value);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                />
+              </td>
+            );
+          }
+
           if (col.id === "dueDate") {
             return (
               <td key={col.id} className="px-4 py-3">
@@ -714,6 +765,73 @@ export default function MondayBoard() {
                   }}
                   onClick={(e) => e.stopPropagation()}
                   className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                />
+              </td>
+            );
+          }
+
+          if (col.id === "sprint") {
+            return (
+              <td key={col.id} className="px-4 py-3">
+                <select
+                  value={task.sprintId || ""}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleSprintChange(task.id, e.target.value || null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="">Sem sprint</option>
+                  {sprints?.map((sprint: any) => (
+                    <option key={sprint.id} value={sprint.id}>
+                      {sprint.name}
+                    </option>
+                  ))}
+                </select>
+              </td>
+            );
+          }
+
+          if (col.id === "resource") {
+            return (
+              <td key={col.id} className="px-4 py-3">
+                <select
+                  value={task.resourceId || ""}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleResourceChange(task.id, e.target.value || null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="">Sem recurso</option>
+                  {resources?.map((resource: any) => (
+                    <option key={resource.id} value={resource.id}>
+                      {resource.name}
+                    </option>
+                  ))}
+                </select>
+              </td>
+            );
+          }
+
+          if (col.id === "notes") {
+            return (
+              <td key={col.id} className="px-4 py-3">
+                <input
+                  type="text"
+                  value={task.notes || ""}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleTextChange(task.id, "notes", e.target.value);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={(e) => {
+                    handleTextChange(task.id, "notes", e.target.value);
+                  }}
+                  placeholder="Observações..."
+                  className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
                 />
               </td>
             );
