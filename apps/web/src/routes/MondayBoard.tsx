@@ -868,9 +868,11 @@ export default function MondayBoard() {
         }}
       >
         {visibleColumns.map((col) => {
+          const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
+          
           if (col.id === "expand") {
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <div className="flex items-center gap-1">
                   {!isSubtask && (
                     <input
@@ -916,9 +918,10 @@ export default function MondayBoard() {
           if (col.id === "title") {
             const isEditingTitle = editingCell?.taskId === task.id && editingCell?.field === "title";
             const isEditingDescription = editingCell?.taskId === task.id && editingCell?.field === "description";
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             
             return (
-              <td key={col.id} className="px-4 py-3" style={{ paddingLeft: isSubtask ? "3rem" : "1rem" }}>
+              <td key={col.id} className="px-4 py-3" style={{ paddingLeft: isSubtask ? "3rem" : "1rem", width: `${columnWidth}px` }}>
                 <div className="flex items-center gap-2">
                   <div
                     {...attributes}
@@ -991,8 +994,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "status") {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <select
                   value={task.status || "BACKLOG"}
                   onChange={(e) => {
@@ -1013,8 +1017,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "assignee") {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <select
                   value={task.assigneeId || ""}
                   onChange={(e) => {
@@ -1036,8 +1041,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "startDate") {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <input
                   type="date"
                   value={task.startDate ? task.startDate.split("T")[0] : ""}
@@ -1053,8 +1059,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "dueDate") {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <input
                   type="date"
                   value={task.dueDate ? task.dueDate.split("T")[0] : ""}
@@ -1070,8 +1077,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "sprint") {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <select
                   value={task.sprintId || ""}
                   onChange={(e) => {
@@ -1093,8 +1101,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "resource") {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <select
                   value={task.resourceId || ""}
                   onChange={(e) => {
@@ -1116,8 +1125,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "notes") {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <input
                   type="text"
                   value={task.description || ""}
@@ -1137,8 +1147,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "estimateHours") {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <input
                   type="number"
                   value={task.estimateHours || ""}
@@ -1155,8 +1166,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "actualHours") {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3">
+              <td key={col.id} className="px-4 py-3" style={{ width: `${columnWidth}px` }}>
                 <input
                   type="number"
                   value={task.actualHours || ""}
@@ -1200,8 +1212,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "tags") {
+            const columnWidth = columnWidths[col.id] || getDefaultColumnWidth(col.id);
             return (
-              <td key={col.id} className="px-4 py-3 text-sm text-gray-400">
+              <td key={col.id} className="px-4 py-3 text-sm text-gray-400" style={{ width: `${columnWidth}px` }}>
                 {task.tags && task.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {task.tags.map((tag) => (
