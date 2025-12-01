@@ -247,6 +247,8 @@ export default function MondayBoard() {
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [showBulkActions, setShowBulkActions] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ taskId: string; field: "title" | "description" } | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   // Organizar tarefas em árvore (pais e filhos)
   const taskTree = useMemo(() => {
@@ -463,6 +465,24 @@ export default function MondayBoard() {
     });
   };
 
+  const startEditing = (taskId: string, field: "title" | "description", currentValue: string) => {
+    setEditingCell({ taskId, field });
+    setEditValue(currentValue || "");
+  };
+
+  const saveEdit = () => {
+    if (editingCell) {
+      handleTextChange(editingCell.taskId, editingCell.field, editValue);
+      setEditingCell(null);
+      setEditValue("");
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingCell(null);
+    setEditValue("");
+  };
+
   const handleResourceChange = (taskId: string, resourceId: string | null) => {
     updateTaskMutation.mutate({
       taskId,
@@ -666,6 +686,9 @@ export default function MondayBoard() {
           }
 
           if (col.id === "title") {
+            const isEditingTitle = editingCell?.taskId === task.id && editingCell?.field === "title";
+            const isEditingDescription = editingCell?.taskId === task.id && editingCell?.field === "description";
+            
             return (
               <td key={col.id} className="px-4 py-3" style={{ paddingLeft: isSubtask ? "3rem" : "1rem" }}>
                 <div className="flex items-center gap-2">
@@ -677,11 +700,60 @@ export default function MondayBoard() {
                   >
                     ⋮⋮
                   </div>
-                  <div>
-                    <div className="font-medium">{task.title}</div>
-                    {task.description && (
-                      <div className="text-sm text-gray-400 mt-1 line-clamp-2">
-                        {task.description}
+                  <div className="flex-1">
+                    {isEditingTitle ? (
+                      <input
+                        type="text"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={saveEdit}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveEdit();
+                          } else if (e.key === "Escape") {
+                            cancelEdit();
+                          }
+                        }}
+                        className="w-full px-2 py-1 bg-gray-700 border border-blue-500 rounded text-sm font-medium focus:outline-none"
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <div
+                        className="font-medium cursor-text hover:bg-gray-700/50 px-1 py-0.5 rounded"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          startEditing(task.id, "title", task.title);
+                        }}
+                      >
+                        {task.title || <span className="text-gray-500 italic">Sem título</span>}
+                      </div>
+                    )}
+                    {isEditingDescription ? (
+                      <textarea
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={saveEdit}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            cancelEdit();
+                          }
+                        }}
+                        className="w-full mt-1 px-2 py-1 bg-gray-700 border border-blue-500 rounded text-sm text-gray-400 focus:outline-none resize-none"
+                        rows={2}
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <div
+                        className="text-sm text-gray-400 mt-1 line-clamp-2 cursor-text hover:bg-gray-700/50 px-1 py-0.5 rounded"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          startEditing(task.id, "description", task.description || "");
+                        }}
+                      >
+                        {task.description || <span className="text-gray-600 italic">Clique duas vezes para adicionar descrição</span>}
                       </div>
                     )}
                   </div>
