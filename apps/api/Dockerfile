@@ -150,8 +150,13 @@ RUN echo "=== Verificando pacotes críticos ===" && \
         ls -la /app/node_modules/ | grep -E "express|cors|@prisma" | head -5; \
     fi
 
-# Criar diretório para uploads
-RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app/uploads
+# Criar diretório para uploads com permissões corretas
+RUN mkdir -p /app/uploads && \
+    chown -R nodejs:nodejs /app/uploads && \
+    chmod 755 /app/uploads
+
+# Definir variável de ambiente para o diretório de uploads
+ENV UPLOAD_DIR=/app/uploads
 
 USER nodejs
 

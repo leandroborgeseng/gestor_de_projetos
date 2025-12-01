@@ -4,10 +4,22 @@ import path from "path";
 import fs from "fs";
 
 // Criar diretório de uploads se não existir
-const uploadDir = "./uploads";
+// Usar caminho absoluto no Docker, relativo em desenvolvimento
+const uploadDir = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
+
+// Garantir que o diretório existe com permissões corretas
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+  fs.mkdirSync(uploadDir, { recursive: true, mode: 0o755 });
+} else {
+  // Ajustar permissões se o diretório já existir
+  try {
+    fs.chmodSync(uploadDir, 0o755);
+  } catch (error) {
+    console.warn("⚠️ Não foi possível ajustar permissões do diretório uploads:", error);
+  }
 }
+
+console.log(`📁 Diretório de uploads: ${uploadDir}`);
 
 // Configuração de storage
 const storage = multer.diskStorage({

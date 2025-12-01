@@ -36,6 +36,10 @@ import { generalLimiter } from "./middleware/rateLimiter.js";
 
 export const app = express();
 
+// Configurar trust proxy para funcionar corretamente com rate limiting atrás de proxy reverso
+// Isso permite que o Express confie nos headers X-Forwarded-* do proxy (Nginx, Caddy, etc)
+app.set("trust proxy", true);
+
 // Segurança: Helmet para headers de segurança
 app.use(
   helmet({

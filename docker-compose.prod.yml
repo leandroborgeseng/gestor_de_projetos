@@ -43,6 +43,8 @@ services:
       - "${API_PORT:-4000}:4000"
     volumes:
       - ./apps/api/uploads:/app/uploads
+    # Garantir que o diretório de uploads tenha permissões corretas
+    command: sh -c "mkdir -p /app/uploads && chmod 755 /app/uploads && node dist/index.js"
     depends_on:
       db:
         condition: service_healthy
