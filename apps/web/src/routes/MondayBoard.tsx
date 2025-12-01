@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -251,6 +252,55 @@ export default function MondayBoard() {
   const [editingCell, setEditingCell] = useState<{ taskId: string; field: "title" | "description" } | null>(null);
   const [editValue, setEditValue] = useState("");
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Atalhos de teclado
+  useHotkeys("ctrl+n, cmd+n", (e) => {
+    e.preventDefault();
+    setIsCreateModalOpen(true);
+  });
+
+  useHotkeys("ctrl+f, cmd+f", (e) => {
+    e.preventDefault();
+    searchInputRef.current?.focus();
+  });
+
+  useHotkeys("ctrl+k, cmd+k", (e) => {
+    e.preventDefault();
+    setShowFilters(!showFilters);
+  });
+
+  useHotkeys("ctrl+s, cmd+s", (e) => {
+    e.preventDefault();
+    if (editingCell) {
+      saveEdit();
+    }
+  });
+
+  useHotkeys("escape", () => {
+    if (editingCell) {
+      cancelEdit();
+    }
+    if (showFilters) {
+      setShowFilters(false);
+    }
+    if (showSort) {
+      setShowSort(false);
+    }
+    if (showColumnSettings) {
+      setShowColumnSettings(false);
+    }
+    if (showExportMenu) {
+      setShowExportMenu(false);
+    }
+    if (isCreateModalOpen) {
+      setIsCreateModalOpen(false);
+    }
+    if (isEditModalOpen) {
+      setIsEditModalOpen(false);
+      setSelectedTask(null);
+    }
+  });
 
   // Organizar tarefas em árvore (pais e filhos)
   const taskTree = useMemo(() => {
@@ -1201,8 +1251,9 @@ export default function MondayBoard() {
             </button>
             <div className="relative">
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="Pesquisar..."
+                placeholder="Pesquisar... (Ctrl+F)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="px-4 py-2 bg-gray-700 border border-gray-600 rounded text-sm w-64 focus:outline-none focus:border-blue-500"
