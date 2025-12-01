@@ -387,6 +387,12 @@ export async function createProject(req: Request, res: Response) {
       return res.status(404).json({ error: "Empresa não encontrada" });
     }
 
+    // Verificar se o usuário é superadmin
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
     const project = await prisma.project.create({
       data: {
         ...parse.data,
@@ -401,6 +407,12 @@ export async function createProject(req: Request, res: Response) {
             { title: "Done", status: "DONE", order: 4 },
           ],
         },
+        members: {
+          create: [
+            // Adicionar o criador como membro
+            { userId, role: "PROJECT_MANAGER" },
+          ],
+        },
       },
       include: {
         owner: {
@@ -408,6 +420,24 @@ export async function createProject(req: Request, res: Response) {
         },
       },
     });
+
+    // Se o criador não for superadmin, adicionar superadmin como membro
+    if (user?.role !== "SUPERADMIN") {
+      const superadmin = await prisma.user.findFirst({
+        where: { role: "SUPERADMIN" },
+        select: { id: true },
+      });
+
+      if (superadmin) {
+        await prisma.projectMember.create({
+          data: {
+            projectId: project.id,
+            userId: superadmin.id,
+            role: "PROJECT_MANAGER",
+          },
+        });
+      }
+    }
 
     // Log da criação (não bloquear se falhar)
     if (userId) {
