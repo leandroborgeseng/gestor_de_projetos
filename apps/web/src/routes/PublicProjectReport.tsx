@@ -36,7 +36,7 @@ export default function PublicProjectReport() {
     );
   }
 
-  const { project, company, owner, statistics, tasks, tasksByAssignee, overdueTasks, upcomingTasks } = data;
+  const { project, company, owner, statistics, tasks, tasksByAssignee, overdueTasks, upcomingTasks, sprints } = data;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -159,6 +159,98 @@ export default function PublicProjectReport() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Progresso das Sprints */}
+        {sprints && sprints.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Progresso das Sprints</h2>
+            <div className="space-y-4">
+              {sprints.map((sprint: any) => {
+                const statusBadge = sprint.isCompleted
+                  ? "bg-green-100 text-green-800"
+                  : sprint.isActive
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-gray-100 text-gray-800";
+                
+                const statusLabel = sprint.isCompleted
+                  ? "Concluída"
+                  : sprint.isActive
+                  ? "Em Andamento"
+                  : "Planejada";
+
+                return (
+                  <div key={sprint.id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="text-lg font-semibold text-gray-900">{sprint.name}</h3>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusBadge}`}>
+                            {statusLabel}
+                          </span>
+                        </div>
+                        {sprint.goal && (
+                          <p className="text-sm text-gray-600 mb-2">{sprint.goal}</p>
+                        )}
+                        <div className="text-sm text-gray-500">
+                          {new Date(sprint.startDate).toLocaleDateString("pt-BR")} -{" "}
+                          {new Date(sprint.endDate).toLocaleDateString("pt-BR")}
+                          {sprint.isActive && sprint.daysRemaining >= 0 && (
+                            <span className="ml-2 font-medium text-blue-600">
+                              • {sprint.daysRemaining} {sprint.daysRemaining === 1 ? "dia restante" : "dias restantes"}
+                            </span>
+                          )}
+                          {sprint.isCompleted && (
+                            <span className="ml-2 font-medium text-green-600">• Concluída</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-gray-900">{sprint.completionPercentage}%</div>
+                        <div className="text-sm text-gray-500">
+                          {sprint.completedTasks}/{sprint.totalTasks} tarefas
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Barra de progresso */}
+                    <div className="mb-3">
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div
+                          className={`h-3 rounded-full transition-all ${
+                            sprint.isCompleted
+                              ? "bg-green-600"
+                              : sprint.isActive
+                              ? "bg-blue-600"
+                              : "bg-gray-400"
+                          }`}
+                          style={{ width: `${sprint.completionPercentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Estatísticas da sprint */}
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <div className="text-gray-500">Tarefas</div>
+                        <div className="font-semibold text-gray-900">
+                          {sprint.completedTasks} de {sprint.totalTasks}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Horas Estimadas</div>
+                        <div className="font-semibold text-gray-900">{sprint.totalEstimateHours}h</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Horas Reais</div>
+                        <div className="font-semibold text-gray-900">{sprint.totalActualHours}h</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

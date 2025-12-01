@@ -1347,12 +1347,15 @@ export async function getPublicProjectReport(req: Request, res: Response) {
           ],
         },
         sprints: {
-          select: {
-            id: true,
-            name: true,
-            startDate: true,
-            endDate: true,
-            goal: true,
+          include: {
+            tasks: {
+              select: {
+                id: true,
+                status: true,
+                estimateHours: true,
+                actualHours: true,
+              },
+            },
           },
           orderBy: { startDate: "desc" },
         },
@@ -1436,6 +1439,47 @@ export async function getPublicProjectReport(req: Request, res: Response) {
         t.status !== "DONE"
     );
 
+    // Calcular progresso das sprints
+    const sprintsWithProgress = project.sprints.map((sprint) => {
+      const sprintTasks = sprint.tasks || [];
+      const totalTasks = sprintTasks.length;
+      const completedTasks = sprintTasks.filter((t) => t.status === "DONE").length;
+      const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      
+      const totalEstimateHours = sprintTasks.reduce(
+        (sum, t) => sum + (Number(t.estimateHours) || 0),
+        0
+      );
+      const totalActualHours = sprintTasks.reduce(
+        (sum, t) => sum + (Number(t.actualHours) || 0),
+        0
+      );
+
+      // Calcular dias restantes
+      const endDate = new Date(sprint.endDate);
+      const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      const isActive = now >= new Date(sprint.startDate) && now <= endDate;
+      const isCompleted = now > endDate;
+      const isUpcoming = now < new Date(sprint.startDate);
+
+      return {
+        id: sprint.id,
+        name: sprint.name,
+        goal: sprint.goal,
+        startDate: sprint.startDate,
+        endDate: sprint.endDate,
+        totalTasks,
+        completedTasks,
+        completionPercentage,
+        totalEstimateHours,
+        totalActualHours,
+        daysRemaining,
+        isActive,
+        isCompleted,
+        isUpcoming,
+      };
+    });
+
     res.json({
       project: {
         id: project.id,
@@ -1472,7 +1516,7 @@ export async function getPublicProjectReport(req: Request, res: Response) {
         order: task.order,
         isOverdue: task.dueDate && new Date(task.dueDate) < now && task.status !== "DONE",
       })),
-      sprints: project.sprints,
+      sprints: sprintsWithProgress,
       members: project.members.map((m) => m.user),
       overdueTasks: overdueTasks.map((t) => ({
         id: t.id,
