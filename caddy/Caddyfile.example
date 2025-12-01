@@ -1,0 +1,28 @@
+# Exemplo de configuração do Caddy para pm.aion.eng.br
+# Copie este arquivo para o local onde o Caddy está configurado
+
+pm.aion.eng.br {
+    # Proxy reverso para o frontend
+    reverse_proxy agilepm-web:80 {
+        # Headers
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        
+        # Health check
+        health_uri /health
+        health_interval 10s
+        health_timeout 5s
+    }
+    
+    # Logs
+    log {
+        output file /var/log/caddy/pm.aion.eng.br.log
+        format json
+    }
+}
+
+# Se o Caddy e agilepm-web não estiverem na mesma rede Docker,
+# use o IP do host:
+# reverse_proxy localhost:8080
+
