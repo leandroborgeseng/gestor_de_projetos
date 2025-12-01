@@ -41,12 +41,19 @@ export async function createSprint(req: Request, res: Response) {
   try {
     const parse = CreateSprintSchema.safeParse(req.body);
     if (!parse.success) {
-      return res.status(400).json({ error: parse.error.flatten() });
+      console.error("Erro de validação ao criar sprint:", parse.error.flatten());
+      return res.status(400).json({ 
+        error: "Dados inválidos",
+        details: parse.error.flatten().fieldErrors,
+        message: "Verifique os campos obrigatórios: nome, data de início e data de fim"
+      });
     }
 
     const { projectId } = req.params;
     const companyId = req.companyId;
     const { startDate, endDate, ...data } = parse.data;
+    
+    console.log("Criando sprint:", { projectId, companyId, data: { ...data, startDate, endDate } });
 
     if (!companyId) {
       return res.status(400).json({ error: "Empresa não selecionada" });

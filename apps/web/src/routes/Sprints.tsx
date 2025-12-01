@@ -39,13 +39,55 @@ export default function Sprints() {
     },
     onError: (error: any) => {
       console.error("Erro ao criar sprint:", error);
-      const errorMessage = error?.response?.data?.error || error?.message || "Erro ao criar sprint. Tente novamente.";
+      console.error("Resposta completa:", error?.response?.data);
+      
+      let errorMessage = "Erro ao criar sprint. Tente novamente.";
+      
+      if (error?.response?.data) {
+        const errorData = error.response.data;
+        
+        // Se houver detalhes de validação
+        if (errorData.details) {
+          const details = Object.entries(errorData.details)
+            .map(([field, errors]: [string, any]) => {
+              const fieldName = field === "name" ? "Nome" : 
+                               field === "startDate" ? "Data de Início" :
+                               field === "endDate" ? "Data de Fim" : field;
+              return `${fieldName}: ${Array.isArray(errors) ? errors.join(", ") : errors}`;
+            })
+            .join("\n");
+          errorMessage = `Erro de validação:\n${details}`;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        } else if (errorData.error) {
+          errorMessage = typeof errorData.error === "string" 
+            ? errorData.error 
+            : JSON.stringify(errorData.error);
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
       alert(errorMessage);
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validação básica no frontend
+    if (!formData.name || !formData.startDate || !formData.endDate) {
+      alert("Por favor, preencha todos os campos obrigatórios: Nome, Data Início e Data Fim");
+      return;
+    }
+    
+    // Validar se data fim é posterior à data início
+    if (new Date(formData.endDate) < new Date(formData.startDate)) {
+      alert("A data de fim deve ser posterior à data de início");
+      return;
+    }
+    
+    console.log("Enviando dados da sprint:", formData);
     createSprintMutation.mutate(formData);
   };
 
