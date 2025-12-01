@@ -55,32 +55,41 @@ fi
 echo -e "${YELLOW}⚠️  Migration falhada encontrada${NC}"
 echo ""
 
-echo -e "${YELLOW}2️⃣ Marcando migration como resolvida...${NC}"
+echo -e "${YELLOW}2️⃣ Verificando se a migration já foi aplicada...${NC}"
 
-# Marcar migration como resolvida
-docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma migrate resolve --rolled-back 20251110121500_company_light_theme --schema=$SCHEMA_PATH" || \
-docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma migrate resolve --applied 20251110121500_company_light_theme --schema=$SCHEMA_PATH" || {
-    echo -e "${YELLOW}⚠️  Não foi possível marcar como resolvida. Tentando executar manualmente...${NC}"
+# Verificar se as colunas da migration já existem
+COLUMNS_EXIST=$(docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' psql -t -c \"SELECT COUNT(*) FROM information_schema.columns WHERE table_name='Company' AND column_name IN ('lightPrimaryColor', 'lightSecondaryColor', 'lightAccentColor');\" 2>/dev/null" | tr -d ' ' || echo "0")
+
+if [ "$COLUMNS_EXIST" -ge "3" ]; then
+    echo -e "${GREEN}   ✅ Colunas da migration já existem (migration já foi aplicada)${NC}"
+    echo -e "${YELLOW}3️⃣ Marcando migration como aplicada...${NC}"
     
-    # Tentar executar a migration manualmente
+    # Marcar como aplicada
+    docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma migrate resolve --applied 20251110121500_company_light_theme --schema=$SCHEMA_PATH" || {
+        # Se falhar, marcar manualmente na tabela
+        echo -e "${YELLOW}   Marcando manualmente na tabela...${NC}"
+        docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' psql -c \"UPDATE _prisma_migrations SET finished_at = NOW(), applied_steps_count = 1 WHERE migration_name = '20251110121500_company_light_theme' AND finished_at IS NULL;\"" || true
+    }
+else
+    echo -e "${YELLOW}   ⚠️  Colunas não existem. Executando migration...${NC}"
     echo -e "${YELLOW}3️⃣ Executando migration manualmente...${NC}"
     
-    # Ler o conteúdo da migration
-    MIGRATION_FILE="/app/prisma/migrations/20251110121500_company_light_theme/migration.sql"
+    # Executar SQL da migration
+    MIGRATION_SQL="ALTER TABLE \"Company\" ADD COLUMN IF NOT EXISTS \"lightPrimaryColor\" VARCHAR(10), ADD COLUMN IF NOT EXISTS \"lightSecondaryColor\" VARCHAR(10), ADD COLUMN IF NOT EXISTS \"lightAccentColor\" VARCHAR(10), ADD COLUMN IF NOT EXISTS \"lightBackgroundColor\" VARCHAR(10), ADD COLUMN IF NOT EXISTS \"lightLogoUrl\" TEXT, ADD COLUMN IF NOT EXISTS \"lightLogoKey\" TEXT;"
     
-    if docker exec agilepm-api sh -c "test -f $MIGRATION_FILE" 2>/dev/null; then
-        echo -e "${YELLOW}   Executando SQL da migration...${NC}"
-        docker exec -i agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' psql" < <(docker exec agilepm-api cat $MIGRATION_FILE) || {
-            echo -e "${YELLOW}   ⚠️  Erro ao executar SQL. Tentando marcar como aplicada...${NC}"
-        }
-    fi
+    docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' psql -c \"$MIGRATION_SQL\"" || {
+        echo -e "${YELLOW}   ⚠️  Erro ao executar SQL. Tentando continuar...${NC}"
+    }
     
-    # Marcar como aplicada mesmo se falhar
-    docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' psql -c \"UPDATE _prisma_migrations SET finished_at = NOW(), applied_steps_count = 1 WHERE migration_name = '20251110121500_company_light_theme' AND finished_at IS NULL;\"" || true
-}
+    # Marcar como aplicada
+    echo -e "${YELLOW}4️⃣ Marcando migration como aplicada...${NC}"
+    docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma migrate resolve --applied 20251110121500_company_light_theme --schema=$SCHEMA_PATH" || {
+        docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' psql -c \"UPDATE _prisma_migrations SET finished_at = NOW(), applied_steps_count = 1 WHERE migration_name = '20251110121500_company_light_theme' AND finished_at IS NULL;\"" || true
+    }
+fi
 
 echo ""
-echo -e "${YELLOW}4️⃣ Verificando status das migrations...${NC}"
+echo -e "${YELLOW}5️⃣ Verificando status das migrations...${NC}"
 
 # Verificar status novamente
 docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma migrate status --schema=$SCHEMA_PATH"
