@@ -167,7 +167,55 @@ async function main() {
     }
   }
 
-  // 5. Verificar senha
+  // 5. Adicionar superadmin a todos os projetos
+  console.log("\n📁 Adicionando superadmin a todos os projetos...");
+  const allProjects = await prisma.project.findMany({
+    select: { id: true, name: true },
+  });
+
+  console.log(`   Encontrados ${allProjects.length} projeto(s)`);
+  
+  for (const project of allProjects) {
+    const existingMember = await prisma.projectMember.findUnique({
+      where: {
+        projectId_userId: {
+          projectId: project.id,
+          userId: user.id,
+        },
+      },
+    });
+
+    if (!existingMember) {
+      await prisma.projectMember.create({
+        data: {
+          projectId: project.id,
+          userId: user.id,
+          role: "PROJECT_MANAGER",
+        },
+      });
+      console.log(`   ✅ Adicionado ao projeto: ${project.name}`);
+    } else {
+      // Atualizar para PROJECT_MANAGER se não for
+      if (existingMember.role !== "PROJECT_MANAGER") {
+        await prisma.projectMember.update({
+          where: {
+            projectId_userId: {
+              projectId: project.id,
+              userId: user.id,
+            },
+          },
+          data: {
+            role: "PROJECT_MANAGER",
+          },
+        });
+        console.log(`   ✅ Atualizado para PROJECT_MANAGER em: ${project.name}`);
+      } else {
+        console.log(`   ✅ Já é membro do projeto: ${project.name}`);
+      }
+    }
+  }
+
+  // 6. Verificar senha
   console.log("\n🔍 Testando senha...");
   const testUser = await prisma.user.findUnique({
     where: { email },
@@ -187,6 +235,7 @@ async function main() {
   console.log(`   Email: ${email}`);
   console.log(`   Senha: ${password}`);
   console.log(`   Role: SUPERADMIN`);
+  console.log(`   Projetos: ${allProjects.length}`);
 }
 
 main()
