@@ -40,14 +40,21 @@ if ! docker ps | grep -q agilepm-api; then
     fi
 fi
 
+# Copiar script para o container temporariamente
+echo -e "${YELLOW}📝 Copiando script para o container...${NC}"
+docker cp scripts/make-superadmin.ts agilepm-api:/tmp/make-superadmin.ts
+
 # Executar script TypeScript no container
-echo -e "${YELLOW}📝 Executando script no container...${NC}"
+echo -e "${YELLOW}🚀 Executando script no container...${NC}"
 
 if [ -z "$PASSWORD" ]; then
-    docker exec agilepm-api tsx /app/scripts/make-superadmin.ts "$EMAIL"
+    docker exec agilepm-api tsx /tmp/make-superadmin.ts "$EMAIL"
 else
-    docker exec agilepm-api tsx /app/scripts/make-superadmin.ts "$EMAIL" "$PASSWORD"
+    docker exec agilepm-api tsx /tmp/make-superadmin.ts "$EMAIL" "$PASSWORD"
 fi
+
+# Limpar arquivo temporário
+docker exec agilepm-api rm -f /tmp/make-superadmin.ts
 
 EXIT_CODE=$?
 
