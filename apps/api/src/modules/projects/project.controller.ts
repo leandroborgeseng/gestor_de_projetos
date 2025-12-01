@@ -423,19 +423,36 @@ export async function createProject(req: Request, res: Response) {
 
     // Se o criador não for superadmin, adicionar superadmin como membro
     if (user?.role !== "SUPERADMIN") {
-      const superadmin = await prisma.user.findFirst({
-        where: { role: "SUPERADMIN" },
-        select: { id: true },
-      });
-
-      if (superadmin) {
-        await prisma.projectMember.create({
-          data: {
-            projectId: project.id,
-            userId: superadmin.id,
-            role: "PROJECT_MANAGER",
-          },
+      try {
+        const superadmin = await prisma.user.findFirst({
+          where: { role: "SUPERADMIN" },
+          select: { id: true },
         });
+
+        if (superadmin) {
+          // Verificar se já não é membro (pode acontecer se o owner já for superadmin)
+          const existingMember = await prisma.projectMember.findUnique({
+            where: {
+              projectId_userId: {
+                projectId: project.id,
+                userId: superadmin.id,
+              },
+            },
+          });
+
+          if (!existingMember) {
+            await prisma.projectMember.create({
+              data: {
+                projectId: project.id,
+                userId: superadmin.id,
+                role: "PROJECT_MANAGER",
+              },
+            });
+          }
+        }
+      } catch (err: any) {
+        // Não bloquear a criação do projeto se falhar ao adicionar superadmin
+        console.error("Erro ao adicionar superadmin ao projeto (não crítico):", err);
       }
     }
 
@@ -453,15 +470,40 @@ export async function createProject(req: Request, res: Response) {
 
     res.status(201).json(project);
   } catch (error: any) {
-    console.error("Erro ao criar projeto:", error);
+    console.error("❌ Erro ao criar projeto:", error);
+    console.error("❌ Detalhes do erro:", {
+      code: error.code,
+      meta: error.meta,
+      message: error.message,
+      stack: error.stack,
+    });
+    
     // Retornar mensagem de erro mais detalhada
     if (error.code === "P2002") {
-      return res.status(400).json({ error: "Já existe um projeto com este nome" });
+      return res.status(400).json({ 
+        error: "Já existe um projeto com este nome",
+        details: error.meta?.target,
+      });
     }
     if (error.code === "P2003") {
-      return res.status(400).json({ error: "Referência inválida (empresa ou usuário não encontrado)" });
+      return res.status(400).json({ 
+        error: "Referência inválida (empresa ou usuário não encontrado)",
+        details: error.meta?.field_name,
+      });
     }
-    handleError(error, res);
+    if (error.code === "P2025") {
+      return res.status(404).json({ 
+        error: "Registro não encontrado",
+        details: error.meta?.cause,
+      });
+    }
+    
+    // Retornar mensagem de erro mais útil
+    const errorMessage = error.message || "Erro ao criar projeto";
+    return res.status(500).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
   }
 }
 

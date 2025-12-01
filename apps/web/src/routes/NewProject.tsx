@@ -36,6 +36,17 @@ export default function NewProject() {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       navigate(`/projects/${response.data.id}/board`);
     },
+    onError: (error: any) => {
+      console.error("❌ Erro ao criar projeto:", error);
+      const errorMessage = error.response?.data?.error || error.message || "Erro ao criar projeto. Tente novamente.";
+      const errorDetails = error.response?.data?.details;
+      
+      if (errorDetails) {
+        console.error("Detalhes do erro:", errorDetails);
+      }
+      
+      alert(errorMessage);
+    },
   });
 
   const importFromMondayMutation = useMutation({
