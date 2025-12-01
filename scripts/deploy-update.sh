@@ -78,12 +78,16 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 MAX_RETRIES=30
 RETRY_COUNT=0
 
-# Aguardar API
+# Aguardar API (verificar se container está rodando)
 echo -e "${YELLOW}⏳ Aguardando API...${NC}"
+RETRY_COUNT=0
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-  if docker exec agilepm-api wget --quiet --tries=1 --spider http://localhost:4000/health 2>/dev/null; then
-    echo -e "${GREEN}✓ API está pronta${NC}"
-    break
+  if docker ps | grep -q agilepm-api; then
+    CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' agilepm-api 2>/dev/null || echo "not-found")
+    if [ "$CONTAINER_STATUS" = "running" ]; then
+      echo -e "${GREEN}✓ API está rodando${NC}"
+      break
+    fi
   fi
   RETRY_COUNT=$((RETRY_COUNT + 1))
   if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
