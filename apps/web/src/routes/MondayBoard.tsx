@@ -165,6 +165,16 @@ export default function MondayBoard() {
     },
   });
 
+  const createTaskMutation = useMutation({
+    mutationFn: (data: any) => api.post(`/projects/${id}/tasks`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", id] });
+    },
+  });
+
+  const [creatingSubtaskFor, setCreatingSubtaskFor] = useState<string | null>(null);
+  const [subtaskTitle, setSubtaskTitle] = useState("");
+
   // Organizar tarefas em árvore (pais e filhos)
   const taskTree = useMemo(() => {
     if (!tasks) return [];
@@ -474,17 +484,32 @@ export default function MondayBoard() {
           if (col.id === "expand") {
             return (
               <td key={col.id} className="px-4 py-3">
-                {hasSubtasks && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleRowExpansion(task.id);
-                    }}
-                    className="text-gray-400 hover:text-white"
-                  >
-                    {isExpanded ? "▼" : "▶"}
-                  </button>
-                )}
+                <div className="flex items-center gap-1">
+                  {hasSubtasks && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleRowExpansion(task.id);
+                      }}
+                      className="text-gray-400 hover:text-white"
+                    >
+                      {isExpanded ? "▼" : "▶"}
+                    </button>
+                  )}
+                  {!isSubtask && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCreatingSubtaskFor(task.id);
+                        setSubtaskTitle("");
+                      }}
+                      className="text-gray-400 hover:text-blue-400 text-sm"
+                      title="Adicionar subtarefa"
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
               </td>
             );
           }
@@ -1164,6 +1189,63 @@ export default function MondayBoard() {
                       {filteredTasks.map((task) => (
                         <React.Fragment key={task.id}>
                           <SortableRow task={task} />
+                          {creatingSubtaskFor === task.id && (
+                            <tr className="bg-gray-800/50">
+                              <td colSpan={visibleColumns.length} className="px-4 py-2">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={subtaskTitle}
+                                    onChange={(e) => setSubtaskTitle(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" && subtaskTitle.trim()) {
+                                        createTaskMutation.mutate({
+                                          title: subtaskTitle.trim(),
+                                          parentId: task.id,
+                                          projectId: id,
+                                          status: "TODO",
+                                        });
+                                        setCreatingSubtaskFor(null);
+                                        setSubtaskTitle("");
+                                      } else if (e.key === "Escape") {
+                                        setCreatingSubtaskFor(null);
+                                        setSubtaskTitle("");
+                                      }
+                                    }}
+                                    placeholder="Digite o título da subtarefa e pressione Enter..."
+                                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      if (subtaskTitle.trim()) {
+                                        createTaskMutation.mutate({
+                                          title: subtaskTitle.trim(),
+                                          parentId: task.id,
+                                          projectId: id,
+                                          status: "TODO",
+                                        });
+                                      }
+                                      setCreatingSubtaskFor(null);
+                                      setSubtaskTitle("");
+                                    }}
+                                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm"
+                                  >
+                                    Criar
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setCreatingSubtaskFor(null);
+                                      setSubtaskTitle("");
+                                    }}
+                                    className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
                           {expandedRows.has(task.id) &&
                             task.subtasks &&
                             task.subtasks.map((subtask) => (
@@ -1183,6 +1265,63 @@ export default function MondayBoard() {
                         {groupTasks.map((task) => (
                           <React.Fragment key={task.id}>
                             <SortableRow task={task} />
+                            {creatingSubtaskFor === task.id && (
+                              <tr className="bg-gray-800/50">
+                                <td colSpan={visibleColumns.length} className="px-4 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="text"
+                                      value={subtaskTitle}
+                                      onChange={(e) => setSubtaskTitle(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" && subtaskTitle.trim()) {
+                                          createTaskMutation.mutate({
+                                            title: subtaskTitle.trim(),
+                                            parentId: task.id,
+                                            projectId: id,
+                                            status: "TODO",
+                                          });
+                                          setCreatingSubtaskFor(null);
+                                          setSubtaskTitle("");
+                                        } else if (e.key === "Escape") {
+                                          setCreatingSubtaskFor(null);
+                                          setSubtaskTitle("");
+                                        }
+                                      }}
+                                      placeholder="Digite o título da subtarefa e pressione Enter..."
+                                      className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                                      autoFocus
+                                    />
+                                    <button
+                                      onClick={() => {
+                                        if (subtaskTitle.trim()) {
+                                          createTaskMutation.mutate({
+                                            title: subtaskTitle.trim(),
+                                            parentId: task.id,
+                                            projectId: id,
+                                            status: "TODO",
+                                          });
+                                        }
+                                        setCreatingSubtaskFor(null);
+                                        setSubtaskTitle("");
+                                      }}
+                                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm"
+                                    >
+                                      Criar
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setCreatingSubtaskFor(null);
+                                        setSubtaskTitle("");
+                                      }}
+                                      className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
                             {expandedRows.has(task.id) &&
                               task.subtasks &&
                               task.subtasks.map((subtask) => (
