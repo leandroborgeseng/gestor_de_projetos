@@ -51,10 +51,17 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}3️⃣  Reiniciando serviços...${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# Parar containers antigos
+# Parar e remover containers antigos (incluindo corrompidos)
 echo -e "${YELLOW}🛑 Parando containers antigos...${NC}"
 docker stop agilepm-api agilepm-web 2>/dev/null || true
 docker rm agilepm-api agilepm-web 2>/dev/null || true
+
+# Limpar containers órfãos e corrompidos
+echo -e "${YELLOW}🧹 Limpando containers corrompidos...${NC}"
+docker-compose -f docker-compose.prod.yml --env-file .env.production down --remove-orphans 2>/dev/null || true
+
+# Remover containers órfãos manualmente
+docker container prune -f 2>/dev/null || true
 
 # Iniciar novos containers
 echo -e "${YELLOW}🚀 Iniciando novos containers...${NC}"
