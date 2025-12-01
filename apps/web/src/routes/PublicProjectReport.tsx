@@ -36,7 +36,7 @@ export default function PublicProjectReport() {
     );
   }
 
-  const { project, company, owner, statistics, tasks, tasksByAssignee, sprints, overdueTasks, upcomingTasks } = data;
+  const { project, company, owner, statistics, tasks, tasksByAssignee, overdueTasks, upcomingTasks } = data;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
