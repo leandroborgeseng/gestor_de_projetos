@@ -67,32 +67,24 @@ docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' prisma migrate 
 echo -e "${GREEN}✅ Migrations executadas!${NC}"
 echo ""
 
-echo -e "${YELLOW}3️⃣ Regenerando Prisma Client...${NC}"
+echo -e "${YELLOW}3️⃣ Reconstruindo container da API para regenerar Prisma Client...${NC}"
 
-# Regenerar Prisma Client no diretório do projeto (não global)
-# O Prisma Client deve ser gerado em node_modules/.prisma/client dentro do projeto
-docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma generate --schema=$SCHEMA_PATH --generator client" || \
-docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' ./node_modules/.bin/prisma generate --schema=$SCHEMA_PATH" || {
-    echo -e "${YELLOW}⚠️  Tentando com pnpm...${NC}"
-    docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' pnpm prisma generate --schema=$SCHEMA_PATH" || {
-        echo -e "${YELLOW}⚠️  Tentando executar do diretório apps/api...${NC}"
-        docker exec agilepm-api sh -c "cd /app/apps/api && DATABASE_URL='$DB_URL' npx prisma generate" || {
-            echo -e "${RED}❌ Erro ao regenerar Prisma Client${NC}"
-            echo -e "${YELLOW}💡 O Prisma Client será regenerado no próximo build do Docker${NC}"
-            echo -e "${YELLOW}💡 Continuando mesmo assim...${NC}"
-        }
-    }
-}
+# Reconstruir container da API (isso regenera o Prisma Client automaticamente)
+docker-compose -f docker-compose.prod.yml --env-file .env.production build api
 
-echo -e "${GREEN}✅ Prisma Client regenerado!${NC}"
-echo ""
-
-echo -e "${YELLOW}4️⃣ Reiniciando container da API...${NC}"
-
-# Reiniciar container para carregar novo Prisma Client
-docker restart agilepm-api
-
-echo -e "${GREEN}✅ Container reiniciado!${NC}"
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✅ Container reconstruído!${NC}"
+    echo ""
+    echo -e "${YELLOW}4️⃣ Reiniciando container da API...${NC}"
+    
+    # Reiniciar container
+    docker-compose -f docker-compose.prod.yml --env-file .env.production up -d api
+    
+    echo -e "${GREEN}✅ Container reiniciado!${NC}"
+else
+    echo -e "${YELLOW}⚠️  Erro ao reconstruir container. Tentando apenas reiniciar...${NC}"
+    docker restart agilepm-api
+fi
 echo ""
 
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
