@@ -38,6 +38,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       PORT: 4000
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      DISABLE_RATE_LIMIT: ${DISABLE_RATE_LIMIT:-false}
     ports:
       - "${API_PORT:-4000}:4000"
     volumes:
