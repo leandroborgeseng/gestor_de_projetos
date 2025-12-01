@@ -11,6 +11,7 @@ import {
   archiveProject,
   unarchiveProject,
   cloneProject,
+  importFromMondayExcel,
 } from "./project.controller.js";
 import {
   getProjectMembers,
@@ -19,6 +20,8 @@ import {
   removeProjectMember,
 } from "./project-members.controller.js";
 import { authMiddleware } from "../../auth/middleware.js";
+import { upload } from "../../config/upload.js";
+import { uploadLimiter } from "../../middleware/rateLimiter.js";
 
 export const router = Router();
 
@@ -105,6 +108,45 @@ router.get("/", getProjects);
  *         description: Dados inválidos
  */
 router.post("/", createProject);
+
+/**
+ * @swagger
+ * /projects/import/monday:
+ *   post:
+ *     summary: Importar projeto e tarefas de arquivo Excel do Monday.com
+ *     tags: [Projects]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *               - projectName
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo Excel exportado do Monday.com
+ *               projectName:
+ *                 type: string
+ *                 description: Nome do projeto a ser criado
+ *               projectDescription:
+ *                 type: string
+ *                 description: Descrição do projeto
+ *               defaultHourlyRate:
+ *                 type: number
+ *                 description: Taxa horária padrão do projeto
+ *     responses:
+ *       201:
+ *         description: Projeto e tarefas importados com sucesso
+ *       400:
+ *         description: Dados inválidos ou arquivo inválido
+ */
+router.post("/import/monday", uploadLimiter, upload.single("file"), importFromMondayExcel);
 
 router.get("/summary", getProjectsSummary);
 router.get("/search", searchAll);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/axios.js";
 import Navbar from "../components/Navbar.js";
@@ -7,7 +7,15 @@ import TemplateSelector from "../components/TemplateSelector.js";
 
 export default function NewProject() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [isTemplateSelectorOpen, setIsTemplateSelectorOpen] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importData, setImportData] = useState({
+    projectName: "",
+    projectDescription: "",
+    defaultHourlyRate: "",
+  });
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -25,9 +33,48 @@ export default function NewProject() {
   const createProjectMutation = useMutation({
     mutationFn: (data: any) => api.post("/projects", data),
     onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       navigate(`/projects/${response.data.id}/board`);
     },
   });
+
+  const importFromMondayMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const response = await api.post("/projects/import/monday", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setShowImportModal(false);
+      setImportFile(null);
+      setImportData({ projectName: "", projectDescription: "", defaultHourlyRate: "" });
+      navigate(`/projects/${data.project.id}/board`);
+    },
+  });
+
+  const handleImportSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFile) {
+      alert("Por favor, selecione um arquivo Excel");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", importFile);
+    formData.append("projectName", importData.projectName);
+    if (importData.projectDescription) {
+      formData.append("projectDescription", importData.projectDescription);
+    }
+    if (importData.defaultHourlyRate) {
+      formData.append("defaultHourlyRate", importData.defaultHourlyRate);
+    }
+
+    importFromMondayMutation.mutate(formData);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,6 +146,25 @@ export default function NewProject() {
               />
             </svg>
             Criar a partir de Template
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="px-6 py-3 bg-green-700 text-white rounded-md hover:bg-green-600 flex items-center gap-2"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+            Importar do Monday.com
           </button>
         </div>
 
@@ -252,6 +318,122 @@ export default function NewProject() {
         isOpen={isTemplateSelectorOpen}
         onClose={() => setIsTemplateSelectorOpen(false)}
       />
+
+      {/* Modal de Importação do Monday.com */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-100">Importar do Monday.com</h2>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportData({ projectName: "", projectDescription: "", defaultHourlyRate: "" });
+                }}
+                className="text-gray-400 hover:text-gray-200"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleImportSubmit} className="space-y-4">
+              {importFromMondayMutation.isError && (
+                <div className="bg-red-900/20 border border-red-800 text-red-400 px-4 py-3 rounded">
+                  {importFromMondayMutation.error instanceof Error
+                    ? importFromMondayMutation.error.message
+                    : "Erro ao importar projeto. Verifique se o arquivo Excel é válido."}
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="excelFile" className="block text-sm font-medium text-gray-300 mb-2">
+                  Arquivo Excel do Monday.com <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="excelFile"
+                  type="file"
+                  accept=".xlsx,.xls"
+                  required
+                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                  className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Selecione o arquivo Excel exportado do Monday.com
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="importProjectName" className="block text-sm font-medium text-gray-300 mb-2">
+                  Nome do Projeto <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="importProjectName"
+                  type="text"
+                  required
+                  value={importData.projectName}
+                  onChange={(e) => setImportData({ ...importData, projectName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Ex: Projeto Importado do Monday"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="importProjectDescription" className="block text-sm font-medium text-gray-300 mb-2">
+                  Descrição do Projeto
+                </label>
+                <textarea
+                  id="importProjectDescription"
+                  value={importData.projectDescription}
+                  onChange={(e) => setImportData({ ...importData, projectDescription: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Descrição opcional do projeto..."
+                />
+              </div>
+
+              <div>
+                <label htmlFor="importDefaultHourlyRate" className="block text-sm font-medium text-gray-300 mb-2">
+                  Taxa Horária Padrão (R$)
+                </label>
+                <input
+                  id="importDefaultHourlyRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={importData.defaultHourlyRate}
+                  onChange={(e) => setImportData({ ...importData, defaultHourlyRate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Ex: 120.00"
+                />
+              </div>
+
+              <div className="flex justify-end gap-4 pt-4 border-t border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportFile(null);
+                    setImportData({ projectName: "", projectDescription: "", defaultHourlyRate: "" });
+                  }}
+                  className="px-6 py-2 border border-gray-600 text-gray-300 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={importFromMondayMutation.isPending || !importFile}
+                  className="px-6 py-2 bg-green-700 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {importFromMondayMutation.isPending ? "Importando..." : "Importar Projeto"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
