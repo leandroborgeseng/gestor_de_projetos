@@ -16,8 +16,15 @@ export default function Login() {
     setLoading(true);
 
     try {
+      console.log("🔐 Tentando fazer login...", { email });
       const response = await api.post("/auth/login", { email, password });
+      console.log("✅ Login bem-sucedido!", response.data);
+      
       const { accessToken, refreshToken, user, companies, activeCompanyId } = response.data;
+
+      if (!accessToken) {
+        throw new Error("Token não recebido da API");
+      }
 
       localStorage.setItem("accessToken", accessToken);
       localStorage.setItem("refreshToken", refreshToken);
@@ -27,9 +34,14 @@ export default function Login() {
 
       syncCompanyContext(companies ?? [], activeCompanyId ?? companies?.[0]?.id ?? null);
 
+      console.log("🚀 Redirecionando para /");
       navigate("/");
     } catch (err: any) {
-      setError(err.response?.data?.error || "Login failed");
+      console.error("❌ Erro no login:", err);
+      console.error("❌ Resposta do erro:", err.response);
+      const errorMessage = err.response?.data?.error || err.message || "Login failed";
+      console.error("❌ Mensagem de erro:", errorMessage);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
