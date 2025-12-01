@@ -92,6 +92,13 @@ export default function MondayBoard() {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showSort, setShowSort] = useState(false);
+  
+  // Ordenação
+  const [sortConfig, setSortConfig] = useState<{
+    field: string;
+    direction: "asc" | "desc";
+  } | null>(null);
   
   // Filtros avançados
   const [filters, setFilters] = useState({
@@ -262,8 +269,61 @@ export default function MondayBoard() {
       filtered = filtered.filter((task) => (task.actualHours || 0) <= max);
     }
     
+    // Aplicar ordenação
+    if (sortConfig) {
+      filtered = [...filtered].sort((a, b) => {
+        let aValue: any;
+        let bValue: any;
+
+        switch (sortConfig.field) {
+          case "title":
+            aValue = a.title?.toLowerCase() || "";
+            bValue = b.title?.toLowerCase() || "";
+            break;
+          case "status":
+            aValue = a.status || "";
+            bValue = b.status || "";
+            break;
+          case "assignee":
+            aValue = a.assignee?.name?.toLowerCase() || "";
+            bValue = b.assignee?.name?.toLowerCase() || "";
+            break;
+          case "dueDate":
+            aValue = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+            bValue = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+            break;
+          case "startDate":
+            aValue = a.startDate ? new Date(a.startDate).getTime() : 0;
+            bValue = b.startDate ? new Date(b.startDate).getTime() : 0;
+            break;
+          case "estimateHours":
+            aValue = a.estimateHours || 0;
+            bValue = b.estimateHours || 0;
+            break;
+          case "actualHours":
+            aValue = a.actualHours || 0;
+            bValue = b.actualHours || 0;
+            break;
+          case "sprint":
+            aValue = a.sprint?.name?.toLowerCase() || "";
+            bValue = b.sprint?.name?.toLowerCase() || "";
+            break;
+          default:
+            return 0;
+        }
+
+        if (aValue < bValue) {
+          return sortConfig.direction === "asc" ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === "asc" ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    
     return filtered;
-  }, [tasks, searchQuery, selectedStatus, filters]);
+  }, [tasks, searchQuery, selectedStatus, filters, sortConfig]);
 
   // Agrupar tarefas
   const groupedTasks = useMemo(() => {
@@ -701,7 +761,16 @@ export default function MondayBoard() {
             >
               Filtro
             </button>
-            <button className="px-3 py-1 text-sm hover:bg-gray-700 rounded">Ordenar</button>
+            <button
+              onClick={() => setShowSort(!showSort)}
+              className={`px-3 py-1 text-sm rounded ${
+                showSort || sortConfig
+                  ? "bg-blue-600 hover:bg-blue-700"
+                  : "hover:bg-gray-700"
+              }`}
+            >
+              Ordenar
+            </button>
           </div>
         </div>
 
@@ -999,6 +1068,60 @@ export default function MondayBoard() {
               >
                 Limpar Filtros
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Sort Options */}
+        {showSort && (
+          <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium text-gray-300">Ordenar por:</label>
+              <select
+                value={sortConfig?.field || ""}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setSortConfig({
+                      field: e.target.value,
+                      direction: sortConfig?.field === e.target.value && sortConfig.direction === "asc" ? "desc" : "asc",
+                    });
+                  } else {
+                    setSortConfig(null);
+                  }
+                }}
+                className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Nenhuma ordenação</option>
+                <option value="title">Título</option>
+                <option value="status">Status</option>
+                <option value="assignee">Pessoa</option>
+                <option value="dueDate">Data de Vencimento</option>
+                <option value="startDate">Data de Início</option>
+                <option value="estimateHours">Estimativa (horas)</option>
+                <option value="actualHours">Realizado (horas)</option>
+                <option value="sprint">Sprint</option>
+              </select>
+              {sortConfig && (
+                <>
+                  <button
+                    onClick={() =>
+                      setSortConfig({
+                        ...sortConfig,
+                        direction: sortConfig.direction === "asc" ? "desc" : "asc",
+                      })
+                    }
+                    className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300"
+                  >
+                    {sortConfig.direction === "asc" ? "↑ Crescente" : "↓ Decrescente"}
+                  </button>
+                  <button
+                    onClick={() => setSortConfig(null)}
+                    className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300"
+                  >
+                    Limpar
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
