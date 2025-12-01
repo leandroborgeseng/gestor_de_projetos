@@ -78,7 +78,8 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: "notes", type: "text", label: "Observação", visible: false, order: 8 },
   { id: "estimateHours", type: "number", label: "Estimativa", visible: true, order: 9 },
   { id: "actualHours", type: "number", label: "Realizado", visible: true, order: 10 },
-  { id: "tags", type: "tags", label: "Tags", visible: true, order: 11 },
+  { id: "progress", type: "number", label: "Progresso", visible: false, order: 11 },
+  { id: "tags", type: "tags", label: "Tags", visible: true, order: 12 },
 ];
 
 type GroupBy = "none" | "status" | "assignee" | "sprint";
@@ -568,6 +569,31 @@ export default function MondayBoard() {
       .slice(0, 2);
   };
 
+  const calculateProgress = (task: Task): number => {
+    // Calcular progresso baseado em subtarefas concluídas
+    if (task.subtasks && task.subtasks.length > 0) {
+      const completed = task.subtasks.filter((st) => st.status === "DONE").length;
+      return Math.round((completed / task.subtasks.length) * 100);
+    }
+    
+    // Se não tem subtarefas, calcular baseado em horas
+    if (task.estimateHours && task.estimateHours > 0) {
+      const progress = Math.min(100, Math.round((task.actualHours || 0) / task.estimateHours * 100));
+      return progress;
+    }
+    
+    // Se não tem estimativa, calcular baseado em status
+    const statusProgress: Record<string, number> = {
+      BACKLOG: 0,
+      TODO: 10,
+      IN_PROGRESS: 50,
+      REVIEW: 80,
+      DONE: 100,
+      BLOCKED: 0,
+    };
+    return statusProgress[task.status || "BACKLOG"] || 0;
+  };
+
   const visibleColumns = columns.filter((col) => col.visible).sort((a, b) => a.order - b.order);
 
   const handleSelectTask = (taskId: string, checked: boolean) => {
@@ -940,6 +966,33 @@ export default function MondayBoard() {
                   className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 w-20"
                   placeholder="0"
                 />
+              </td>
+            );
+          }
+
+          if (col.id === "progress") {
+            const progress = calculateProgress(task);
+            return (
+              <td key={col.id} className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-gray-700 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full transition-all duration-300"
+                      style={{
+                        width: `${progress}%`,
+                        backgroundColor:
+                          progress === 100
+                            ? "#10b981"
+                            : progress >= 50
+                            ? "#3b82f6"
+                            : progress > 0
+                            ? "#f59e0b"
+                            : "#6b7280",
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs text-gray-400 w-10 text-right">{progress}%</span>
+                </div>
               </td>
             );
           }
