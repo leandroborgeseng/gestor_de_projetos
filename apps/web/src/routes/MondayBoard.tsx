@@ -95,7 +95,7 @@ export default function MondayBoard() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
-  const [groupBy, setGroupBy] = useState<GroupBy>(savedConfig?.groupBy || "none");
+  
   // Carregar configurações do localStorage
   const loadSavedConfig = () => {
     if (typeof window === "undefined") return null;
@@ -111,22 +111,43 @@ export default function MondayBoard() {
   };
 
   const savedConfig = loadSavedConfig();
+  const [groupBy, setGroupBy] = useState<GroupBy>(savedConfig?.groupBy || "none");
   const [columns, setColumns] = useState<ColumnConfig[]>(
     savedConfig?.columns || DEFAULT_COLUMNS
   );
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(
     savedConfig?.columnWidths || {}
   );
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showSort, setShowSort] = useState(false);
+  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
   
   // Ordenação
   const [sortConfig, setSortConfig] = useState<{
     field: string;
     direction: "asc" | "desc";
   } | null>(savedConfig?.sortConfig || null);
+  
+  // Filtros avançados
+  const [filters, setFilters] = useState(savedConfig?.filters || {
+    assignees: [] as string[],
+    tags: [] as string[],
+    sprints: [] as string[],
+    dateRange: {
+      start: "",
+      end: "",
+    },
+    hasDueDate: null as boolean | null,
+    estimateHours: {
+      min: "",
+      max: "",
+    },
+    actualHours: {
+      min: "",
+      max: "",
+    },
+  });
 
   // Salvar configurações no localStorage
   const saveConfig = () => {
@@ -186,9 +207,6 @@ export default function MondayBoard() {
     return 120;
   };
 
-  const getColumnWidth = (columnId: string): number => {
-    return columnWidths[columnId] || getDefaultColumnWidth(columnId);
-  };
   
   // Filtros avançados
   const [filters, setFilters] = useState(savedConfig?.filters || {
@@ -349,15 +367,6 @@ export default function MondayBoard() {
     }
   });
 
-  // Organizar tarefas em árvore (pais e filhos)
-  const taskTree = useMemo(() => {
-    if (!tasks) return [];
-    const parents = tasks.filter((task) => !task.subtasks || task.subtasks.length === 0);
-    return parents.map((parent) => ({
-      ...parent,
-      subtasks: tasks.filter((t) => t.id !== parent.id && !t.subtasks?.some((st) => st.id === parent.id)),
-    }));
-  }, [tasks]);
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return [];
@@ -720,13 +729,12 @@ export default function MondayBoard() {
     setExpandedRows(newExpanded);
   };
 
-  const handleDragStart = (event: DragStartEvent) => {
-    setDraggedTaskId(event.active.id as string);
+  const handleDragStart = (_event: DragStartEvent) => {
+    // Drag start handler
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setDraggedTaskId(null);
 
     if (!over || active.id === over.id) return;
 
@@ -741,7 +749,7 @@ export default function MondayBoard() {
       const newOrder = arrayMove(filteredTasks, activeIndex, overIndex);
       
       // Atualizar ordem das tarefas
-      newOrder.forEach((task, index) => {
+      newOrder.forEach((task: Task, index: number) => {
         if (task.order !== index) {
           updateTaskMutation.mutate({
             taskId: task.id,
@@ -764,15 +772,6 @@ export default function MondayBoard() {
     });
   };
 
-  const getUserInitials = (user?: { name: string }) => {
-    if (!user?.name) return "?";
-    return user.name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
 
   const calculateProgress = (task: Task): number => {
     // Calcular progresso baseado em subtarefas concluídas
@@ -1588,7 +1587,7 @@ export default function MondayBoard() {
                           } else {
                             setFilters({
                               ...filters,
-                              assignees: filters.assignees.filter((id) => id !== user.id),
+                              assignees: filters.assignees.filter((id: string) => id !== user.id),
                             });
                           }
                         }}
@@ -1620,7 +1619,7 @@ export default function MondayBoard() {
                           } else {
                             setFilters({
                               ...filters,
-                              tags: filters.tags.filter((id) => id !== tag.id),
+                              tags: filters.tags.filter((id: string) => id !== tag.id),
                             });
                           }
                         }}
@@ -1657,7 +1656,7 @@ export default function MondayBoard() {
                           } else {
                             setFilters({
                               ...filters,
-                              sprints: filters.sprints.filter((id) => id !== sprint.id),
+                              sprints: filters.sprints.filter((id: string) => id !== sprint.id),
                             });
                           }
                         }}
@@ -2180,8 +2179,9 @@ export default function MondayBoard() {
         />
       )}
 
-      {isEditModalOpen && selectedTask && (
+      {isEditModalOpen && selectedTask && id && (
         <EditTaskModal
+          projectId={id}
           task={selectedTask}
           isOpen={isEditModalOpen}
           onClose={() => {
