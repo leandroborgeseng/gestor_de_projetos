@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import api from "../lib/axios.js";
 import CreateTaskModal from "../components/CreateTaskModal.js";
 import EditTaskModal from "../components/EditTaskModal.js";
+import ImportTasksModal from "../components/ImportTasksModal.js";
 
 interface Task {
   id: string;
@@ -91,6 +92,7 @@ export default function MondayBoard() {
   const queryClient = useQueryClient();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
@@ -1358,6 +1360,15 @@ export default function MondayBoard() {
             >
               + Criar elemento
             </button>
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Importar do Monday.com
+            </button>
             <div className="relative">
               <input
                 ref={searchInputRef}
@@ -2170,6 +2181,18 @@ export default function MondayBoard() {
           onSuccess={() => {
             setIsEditModalOpen(false);
             setSelectedTask(null);
+            queryClient.invalidateQueries({ queryKey: ["tasks", id] });
+          }}
+        />
+      )}
+
+      {isImportModalOpen && id && (
+        <ImportTasksModal
+          projectId={id}
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onSuccess={() => {
+            setIsImportModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ["tasks", id] });
           }}
         />

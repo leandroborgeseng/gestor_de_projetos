@@ -1079,3 +1079,309 @@ export async function importFromMondayExcel(req: Request, res: Response) {
     handleError(error, res);
   }
 }
+
+/**
+ * Importa tarefas de um arquivo Excel exportado do Monday.com para um projeto existente
+ */
+export async function importTasksFromMondayExcel(req: Request, res: Response) {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      return res.status(400).json({ error: "Empresa não selecionada" });
+    }
+
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { projectId } = req.params;
+    if (!projectId) {
+      return res.status(400).json({ error: "ID do projeto é obrigatório" });
+    }
+
+    // Verificar se o projeto existe e pertence à empresa
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        companyId,
+      },
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: "Projeto não encontrado" });
+    }
+
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: "Arquivo Excel é obrigatório" });
+    }
+
+    // Ler arquivo Excel
+    const workbook = new ExcelJS.Workbook();
+    const filePath = getFilePath(file.filename);
+    await workbook.xlsx.readFile(filePath);
+
+    // Pegar primeira planilha
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      return res.status(400).json({ error: "Planilha vazia ou inválida" });
+    }
+
+    // Ler cabeçalhos (primeira linha)
+    const headers: string[] = [];
+    worksheet.getRow(1).eachCell((cell, colNumber) => {
+      headers[colNumber] = cell.value?.toString() || "";
+    });
+
+    // Mapear colunas do Monday.com para nossos campos
+    const columnMap: Record<string, string> = {};
+    headers.forEach((header) => {
+      const headerLower = header.toLowerCase().trim();
+      if (headerLower.includes("name") || headerLower.includes("item")) {
+        columnMap.name = header;
+      } else if (headerLower.includes("status") || headerLower.includes("estado")) {
+        columnMap.status = header;
+      } else if (headerLower.includes("person") || headerLower.includes("assignee") || headerLower.includes("responsável") || headerLower.includes("resp")) {
+        columnMap.assignee = header;
+      } else if (headerLower.includes("date") || headerLower.includes("data")) {
+        if (!columnMap.date) {
+          columnMap.date = header;
+        }
+      } else if (headerLower.includes("due") || headerLower.includes("prazo") || headerLower.includes("vencimento")) {
+        columnMap.dueDate = header;
+      } else if (headerLower.includes("start") || headerLower.includes("início") || headerLower.includes("inicio")) {
+        columnMap.startDate = header;
+      } else if (headerLower.includes("description") || headerLower.includes("descrição") || headerLower.includes("notes") || headerLower.includes("notas") || headerLower.includes("observação") || headerLower.includes("observacao")) {
+        columnMap.description = header;
+      } else if (headerLower.includes("hours") || headerLower.includes("horas") || headerLower.includes("estimativa")) {
+        if (!columnMap.hours) {
+          columnMap.hours = header;
+        }
+      } else if (headerLower.includes("numbers") || headerLower.includes("números") || headerLower.includes("numeros")) {
+        if (!columnMap.hours) {
+          columnMap.hours = header;
+        }
+      }
+    });
+
+    if (!columnMap.name) {
+      return res.status(400).json({ error: "Coluna 'Name' ou 'Item Name' não encontrada no Excel" });
+    }
+
+    // Mapear status do Monday.com para nossos status
+    const statusMap: Record<string, TaskStatus> = {
+      "backlog": "BACKLOG",
+      "todo": "TODO",
+      "to do": "TODO",
+      "a fazer": "TODO",
+      "in progress": "IN_PROGRESS",
+      "working on it": "IN_PROGRESS",
+      "em progresso": "IN_PROGRESS",
+      "review": "REVIEW",
+      "revisão": "REVIEW",
+      "done": "DONE",
+      "completed": "DONE",
+      "feito": "DONE",
+      "concluído": "DONE",
+      "concluido": "DONE",
+      "blocked": "BLOCKED",
+      "parado": "BLOCKED",
+      "bloqueado": "BLOCKED",
+    };
+
+    // Função auxiliar para converter datas do Excel
+    const parseExcelDate = (value: any): Date | undefined => {
+      if (!value) return undefined;
+      
+      if (value instanceof Date) {
+        return value;
+      }
+      
+      if (typeof value === "number") {
+        const excelEpoch = new Date(1899, 11, 30);
+        const days = Math.floor(value);
+        const milliseconds = (value - days) * 86400000;
+        return new Date(excelEpoch.getTime() + days * 86400000 + milliseconds);
+      }
+      
+      if (typeof value === "string") {
+        const formats = [
+          /(\d{2})\/(\d{2})\/(\d{4})/,
+          /(\d{4})-(\d{2})-(\d{2})/,
+          /(\d{2})-(\d{2})-(\d{4})/,
+        ];
+        
+        for (const format of formats) {
+          const match = value.match(format);
+          if (match) {
+            if (format === formats[0] || format === formats[2]) {
+              return new Date(parseInt(match[3]), parseInt(match[2]) - 1, parseInt(match[1]));
+            } else {
+              return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+            }
+          }
+        }
+        
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) {
+          return parsed;
+        }
+      }
+      
+      return undefined;
+    };
+
+    // Buscar usuários da empresa para mapeamento
+    const companyUsers = await prisma.user.findMany({
+      where: {
+        companyMemberships: {
+          some: {
+            companyId,
+          },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    });
+
+    // Ler tarefas (a partir da segunda linha)
+    const tasks = [];
+    const errors: Array<{ row: number; error: string }> = [];
+    let order = 0;
+
+    // Buscar última ordem de tarefa no projeto
+    const lastTask = await prisma.task.findFirst({
+      where: { projectId },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+    if (lastTask) {
+      order = lastTask.order + 1;
+    }
+
+    for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+      const row = worksheet.getRow(rowNumber);
+      const rowData: Record<string, any> = {};
+
+      headers.forEach((header, index) => {
+        const cell = row.getCell(index + 1);
+        rowData[header] = cell.value;
+      });
+
+      const taskName = rowData[columnMap.name]?.toString()?.trim();
+      if (!taskName || taskName === "") {
+        continue;
+      }
+
+      try {
+        // Mapear status
+        let status: TaskStatus = "BACKLOG";
+        if (columnMap.status) {
+          const statusValue = rowData[columnMap.status]?.toString()?.toLowerCase().trim() || "";
+          status = statusMap[statusValue] || "BACKLOG";
+        }
+
+        // Mapear assignee
+        let assigneeId: string | undefined = undefined;
+        if (columnMap.assignee) {
+          const assigneeValue = rowData[columnMap.assignee]?.toString()?.trim();
+          if (assigneeValue) {
+            const user = companyUsers.find(
+              (u) =>
+                u.email?.toLowerCase().includes(assigneeValue.toLowerCase()) ||
+                u.name?.toLowerCase().includes(assigneeValue.toLowerCase()) ||
+                assigneeValue.toLowerCase().includes(u.name?.toLowerCase() || "")
+            );
+            if (user) {
+              assigneeId = user.id;
+            }
+          }
+        }
+
+        // Mapear datas
+        let startDate: Date | undefined = undefined;
+        let dueDate: Date | undefined = undefined;
+
+        if (columnMap.startDate) {
+          startDate = parseExcelDate(rowData[columnMap.startDate]);
+        } else if (columnMap.date) {
+          startDate = parseExcelDate(rowData[columnMap.date]);
+        }
+
+        if (columnMap.dueDate) {
+          dueDate = parseExcelDate(rowData[columnMap.dueDate]);
+        } else if (columnMap.date && !startDate) {
+          dueDate = parseExcelDate(rowData[columnMap.date]);
+        }
+
+        // Mapear horas estimadas
+        let estimateHours = 0;
+        if (columnMap.hours) {
+          const hoursValue = rowData[columnMap.hours];
+          if (hoursValue) {
+            const parsed = parseFloat(hoursValue.toString().replace(",", "."));
+            if (!isNaN(parsed)) {
+              estimateHours = parsed;
+            }
+          }
+        }
+
+        // Criar tarefa
+        const task = await prisma.task.create({
+          data: {
+            projectId: project.id,
+            title: taskName,
+            description: columnMap.description ? rowData[columnMap.description]?.toString()?.trim() : undefined,
+            status,
+            estimateHours,
+            assigneeId,
+            startDate,
+            dueDate,
+            order: order++,
+          },
+        });
+
+        tasks.push(task);
+
+        // Log da criação
+        if (userId) {
+          logCreate(userId, companyId, "Task", task.id, task).catch((err) => {
+            console.error("Erro ao criar log de atividade:", err);
+          });
+        }
+      } catch (error: any) {
+        errors.push({
+          row: rowNumber,
+          error: error.message || "Erro ao processar tarefa",
+        });
+      }
+    }
+
+    // Deletar arquivo temporário
+    try {
+      const fs = await import("fs");
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (error) {
+      // Ignorar erro ao deletar arquivo
+    }
+
+    res.status(200).json({
+      project: {
+        id: project.id,
+        name: project.name,
+      },
+      tasks,
+      imported: tasks.length,
+      errors: errors.length > 0 ? errors : undefined,
+      message: `${tasks.length} tarefa(s) importada(s) com sucesso${errors.length > 0 ? ` (${errors.length} erro(s))` : ""}`,
+    });
+  } catch (error) {
+    handleError(error, res);
+  }
+}

@@ -12,6 +12,7 @@ import {
   unarchiveProject,
   cloneProject,
   importFromMondayExcel,
+  importTasksFromMondayExcel,
 } from "./project.controller.js";
 import {
   getProjectMembers,
@@ -314,6 +315,42 @@ router.post("/:id/unarchive", unarchiveProject);
  *         description: Projeto clonado com sucesso
  */
 router.post("/:id/clone", cloneProject);
+
+/**
+ * @swagger
+ * /projects/{id}/import/tasks:
+ *   post:
+ *     summary: Importar tarefas de arquivo Excel do Monday.com para projeto existente
+ *     tags: [Projects]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID do projeto
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo Excel exportado do Monday.com
+ *     responses:
+ *       200:
+ *         description: Tarefas importadas com sucesso
+ *       400:
+ *         description: Dados inválidos ou arquivo inválido
+ */
+router.post("/:projectId/import/tasks", uploadLimiter, upload.single("file"), importTasksFromMondayExcel);
 
 // Rotas de membros do projeto
 router.get("/:projectId/members", getProjectMembers);
