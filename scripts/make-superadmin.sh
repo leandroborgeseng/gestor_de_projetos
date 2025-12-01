@@ -40,21 +40,29 @@ if ! docker ps | grep -q agilepm-api; then
     fi
 fi
 
-# Copiar script para o container temporariamente
+# Copiar script para o container no diretório prisma (onde os módulos estão disponíveis)
 echo -e "${YELLOW}📝 Copiando script para o container...${NC}"
-docker cp scripts/make-superadmin.ts agilepm-api:/tmp/make-superadmin.ts
+docker cp scripts/make-superadmin.ts agilepm-api:/app/prisma/make-superadmin.ts
 
-# Executar script TypeScript no container
+# Obter DATABASE_URL do container
+DB_URL=$(docker exec agilepm-api sh -c 'echo "$DATABASE_URL"' 2>/dev/null || echo "")
+
+if [ -z "$DB_URL" ]; then
+    echo -e "${RED}❌ DATABASE_URL não está definida no container${NC}"
+    exit 1
+fi
+
+# Executar script TypeScript no container de dentro do diretório prisma
 echo -e "${YELLOW}🚀 Executando script no container...${NC}"
 
 if [ -z "$PASSWORD" ]; then
-    docker exec agilepm-api tsx /tmp/make-superadmin.ts "$EMAIL"
+    docker exec agilepm-api sh -c "cd /app/prisma && DATABASE_URL='$DB_URL' tsx make-superadmin.ts '$EMAIL'"
 else
-    docker exec agilepm-api tsx /tmp/make-superadmin.ts "$EMAIL" "$PASSWORD"
+    docker exec agilepm-api sh -c "cd /app/prisma && DATABASE_URL='$DB_URL' tsx make-superadmin.ts '$EMAIL' '$PASSWORD'"
 fi
 
 # Limpar arquivo temporário
-docker exec agilepm-api rm -f /tmp/make-superadmin.ts
+docker exec agilepm-api rm -f /app/prisma/make-superadmin.ts
 
 EXIT_CODE=$?
 
