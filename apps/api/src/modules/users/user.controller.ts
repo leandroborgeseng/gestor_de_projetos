@@ -180,7 +180,41 @@ export async function createUser(req: Request, res: Response) {
 
     const parse = CreateUserSchema.safeParse(req.body);
     if (!parse.success) {
-      return res.status(400).json({ error: parse.error.flatten() });
+      const flattened = parse.error.flatten();
+      console.error("Erro de validação ao criar usuário:", flattened);
+      console.error("Dados recebidos:", req.body);
+      
+      // Criar mensagem de erro mais amigável
+      const fieldErrors = flattened.fieldErrors;
+      const errorMessages: string[] = [];
+      
+      if (fieldErrors.email) {
+        errorMessages.push(`E-mail: ${fieldErrors.email.join(", ")}`);
+      }
+      if (fieldErrors.password) {
+        errorMessages.push(`Senha: ${fieldErrors.password.join(", ")}`);
+      }
+      if (fieldErrors.name) {
+        errorMessages.push(`Nome: ${fieldErrors.name.join(", ")}`);
+      }
+      if (fieldErrors.cep) {
+        errorMessages.push(`CEP: ${fieldErrors.cep.join(", ")}`);
+      }
+      if (fieldErrors.phone) {
+        errorMessages.push(`Telefone: ${fieldErrors.phone.join(", ")}`);
+      }
+      if (fieldErrors.cellphone) {
+        errorMessages.push(`Celular: ${fieldErrors.cellphone.join(", ")}`);
+      }
+      
+      return res.status(400).json({ 
+        error: {
+          message: errorMessages.length > 0 
+            ? `Erro de validação:\n${errorMessages.join("\n")}`
+            : "Verifique os campos obrigatórios",
+          fieldErrors: fieldErrors
+        }
+      });
     }
 
     const { password, ...data } = parse.data;
