@@ -250,6 +250,7 @@ export default function MondayBoard() {
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [editingCell, setEditingCell] = useState<{ taskId: string; field: "title" | "description" } | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   // Organizar tarefas em árvore (pais e filhos)
   const taskTree = useMemo(() => {
@@ -482,6 +483,113 @@ export default function MondayBoard() {
   const cancelEdit = () => {
     setEditingCell(null);
     setEditValue("");
+  };
+
+  const handleExport = (format: "csv" | "excel") => {
+    if (!filteredTasks || filteredTasks.length === 0) {
+      alert("Nenhuma tarefa para exportar");
+      return;
+    }
+
+    const headers = visibleColumns
+      .filter((col) => col.id !== "expand")
+      .map((col) => col.label);
+
+    const rows = filteredTasks.map((task) => {
+      return visibleColumns
+        .filter((col) => col.id !== "expand")
+        .map((col) => {
+          switch (col.id) {
+            case "title":
+              return task.title || "";
+            case "status":
+              return STATUS_OPTIONS.find((s) => s.value === task.status)?.label || task.status || "";
+            case "assignee":
+              return task.assignee?.name || "";
+            case "startDate":
+              return task.startDate ? formatDate(task.startDate) : "";
+            case "dueDate":
+              return task.dueDate ? formatDate(task.dueDate) : "";
+            case "sprint":
+              return task.sprint?.name || "";
+            case "resource":
+              return task.resource?.name || "";
+            case "notes":
+              return task.description || "";
+            case "estimateHours":
+              return task.estimateHours?.toString() || "0";
+            case "actualHours":
+              return task.actualHours?.toString() || "0";
+            case "progress":
+              return `${calculateProgress(task)}%`;
+            case "tags":
+              return task.tags?.map((t) => t.tag.name).join(", ") || "";
+            default:
+              return "";
+          }
+        });
+    });
+
+    if (format === "csv") {
+      const csvContent = [
+        headers.join(","),
+        ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")),
+      ].join("\n");
+
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${project?.name || "projeto"}-tarefas-${new Date().toISOString().split("T")[0]}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      // Para Excel, vamos criar um CSV com extensão .xlsx (funciona no Excel)
+      // Ou criar um HTML table que Excel pode abrir
+      const htmlContent = `
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <style>
+              table { border-collapse: collapse; width: 100%; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #4CAF50; color: white; }
+            </style>
+          </head>
+          <body>
+            <table>
+              <thead>
+                <tr>
+                  ${headers.map((h) => `<th>${h}</th>`).join("")}
+                </tr>
+              </thead>
+              <tbody>
+                ${rows
+                  .map(
+                    (row) =>
+                      `<tr>${row.map((cell) => `<td>${String(cell).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>`).join("")}</tr>`
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `;
+
+      const blob = new Blob(["\uFEFF" + htmlContent], { type: "application/vnd.ms-excel" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${project?.name || "projeto"}-tarefas-${new Date().toISOString().split("T")[0]}.xls`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    setShowExportMenu(false);
   };
 
   const handleResourceChange = (taskId: string, resourceId: string | null) => {
