@@ -17,10 +17,23 @@ echo -e "${BLUE}🔧 Executando migrations e regenerando Prisma Client${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
+# Limpar containers antigos primeiro (evita erro ContainerConfig)
+echo -e "${YELLOW}0️⃣ Limpando containers antigos...${NC}"
+docker stop agilepm-api 2>/dev/null || true
+docker rm agilepm-api 2>/dev/null || true
+echo -e "${GREEN}✅ Containers limpos${NC}"
+echo ""
+
 # Verificar se o container da API está rodando
 if ! docker ps | grep -q agilepm-api; then
-    echo -e "${RED}❌ Container da API não está rodando${NC}"
-    echo -e "${YELLOW}💡 Tentando iniciar containers...${NC}"
+    echo -e "${YELLOW}⚠️  Container da API não está rodando${NC}"
+    echo -e "${YELLOW}💡 Parando e removendo containers antigos...${NC}"
+    
+    # Parar e remover containers antigos (evita erro ContainerConfig)
+    docker stop agilepm-api 2>/dev/null || true
+    docker rm agilepm-api 2>/dev/null || true
+    
+    echo -e "${YELLOW}💡 Iniciando containers...${NC}"
     docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
     sleep 10
     if ! docker ps | grep -q agilepm-api; then
