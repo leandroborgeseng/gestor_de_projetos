@@ -39,7 +39,6 @@ interface Task {
   tags?: Array<{ id: string; tag: { id: string; name: string; color: string } }>;
   resourceId?: string;
   resource?: { id: string; name: string };
-  notes?: string; // Observação/notas
 }
 
 interface Project {
@@ -821,14 +820,14 @@ export default function MondayBoard() {
               <td key={col.id} className="px-4 py-3">
                 <input
                   type="text"
-                  value={task.notes || ""}
+                  value={task.description || ""}
                   onChange={(e) => {
                     e.stopPropagation();
-                    handleTextChange(task.id, "notes", e.target.value);
+                    handleTextChange(task.id, "description", e.target.value);
                   }}
                   onClick={(e) => e.stopPropagation()}
                   onBlur={(e) => {
-                    handleTextChange(task.id, "notes", e.target.value);
+                    handleTextChange(task.id, "description", e.target.value);
                   }}
                   placeholder="Observações..."
                   className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
