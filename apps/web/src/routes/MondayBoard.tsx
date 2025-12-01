@@ -91,6 +91,27 @@ export default function MondayBoard() {
   const [columns, setColumns] = useState<ColumnConfig[]>(DEFAULT_COLUMNS);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Filtros avançados
+  const [filters, setFilters] = useState({
+    assignees: [] as string[],
+    tags: [] as string[],
+    sprints: [] as string[],
+    dateRange: {
+      start: "",
+      end: "",
+    },
+    hasDueDate: null as boolean | null,
+    estimateHours: {
+      min: "",
+      max: "",
+    },
+    actualHours: {
+      min: "",
+      max: "",
+    },
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -115,6 +136,18 @@ export default function MondayBoard() {
   const { data: users } = useQuery({
     queryKey: ["users"],
     queryFn: () => api.get("/users").then((res) => res.data.data),
+  });
+
+  const { data: tags } = useQuery({
+    queryKey: ["tags", id],
+    queryFn: () => api.get(`/tags?companyId=${id}`).then((res) => res.data.data || []),
+    enabled: !!id,
+  });
+
+  const { data: sprints } = useQuery({
+    queryKey: ["sprints", id],
+    queryFn: () => api.get(`/projects/${id}/sprints`).then((res) => res.data || []),
+    enabled: !!id,
   });
 
   const updateTaskMutation = useMutation({
@@ -145,6 +178,7 @@ export default function MondayBoard() {
       return !isSubtask;
     });
     
+    // Busca por texto
     if (searchQuery) {
       filtered = filtered.filter((task) =>
         task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -152,12 +186,84 @@ export default function MondayBoard() {
       );
     }
     
+    // Filtro por status
     if (selectedStatus) {
       filtered = filtered.filter((task) => task.status === selectedStatus);
     }
     
+    // Filtros avançados
+    // Por atribuídos
+    if (filters.assignees.length > 0) {
+      filtered = filtered.filter((task) =>
+        task.assigneeId && filters.assignees.includes(task.assigneeId)
+      );
+    }
+    
+    // Por tags
+    if (filters.tags.length > 0) {
+      filtered = filtered.filter((task) =>
+        task.tags?.some((tag) => filters.tags.includes(tag.tag.id))
+      );
+    }
+    
+    // Por sprints
+    if (filters.sprints.length > 0) {
+      filtered = filtered.filter((task) =>
+        task.sprintId && filters.sprints.includes(task.sprintId)
+      );
+    }
+    
+    // Por data de vencimento
+    if (filters.dateRange.start) {
+      filtered = filtered.filter((task) => {
+        if (!task.dueDate) return false;
+        const taskDate = new Date(task.dueDate);
+        const startDate = new Date(filters.dateRange.start);
+        return taskDate >= startDate;
+      });
+    }
+    
+    if (filters.dateRange.end) {
+      filtered = filtered.filter((task) => {
+        if (!task.dueDate) return false;
+        const taskDate = new Date(task.dueDate);
+        const endDate = new Date(filters.dateRange.end);
+        endDate.setHours(23, 59, 59, 999);
+        return taskDate <= endDate;
+      });
+    }
+    
+    // Por presença de data de vencimento
+    if (filters.hasDueDate !== null) {
+      filtered = filtered.filter((task) =>
+        filters.hasDueDate ? !!task.dueDate : !task.dueDate
+      );
+    }
+    
+    // Por estimativa de horas
+    if (filters.estimateHours.min) {
+      const min = parseFloat(filters.estimateHours.min);
+      filtered = filtered.filter((task) => (task.estimateHours || 0) >= min);
+    }
+    
+    if (filters.estimateHours.max) {
+      const max = parseFloat(filters.estimateHours.max);
+      filtered = filtered.filter((task) => (task.estimateHours || 0) <= max);
+    }
+    
+    // Por horas realizadas
+    if (filters.actualHours.min) {
+      const min = parseFloat(filters.actualHours.min);
+      filtered = filtered.filter((task) => (task.actualHours || 0) >= min);
+    }
+    
+    if (filters.actualHours.max) {
+      const max = parseFloat(filters.actualHours.max);
+      filtered = filtered.filter((task) => (task.actualHours || 0) <= max);
+    }
+    
     return filtered;
-  }, [tasks, searchQuery, selectedStatus]);
+  }, [tasks, searchQuery, selectedStatus, filters]);
 
   // Agrupar tarefas
   const groupedTasks = useMemo(() => {
@@ -579,7 +685,22 @@ export default function MondayBoard() {
             >
               Colunas
             </button>
-            <button className="px-3 py-1 text-sm hover:bg-gray-700 rounded">Filtro</button>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-3 py-1 text-sm rounded ${
+                showFilters || Object.values(filters).some((v) => {
+                  if (Array.isArray(v)) return v.length > 0;
+                  if (typeof v === "object" && v !== null) {
+                    return Object.values(v).some((sv) => sv !== "" && sv !== null);
+                  }
+                  return false;
+                })
+                  ? "bg-blue-600 hover:bg-blue-700"
+                  : "hover:bg-gray-700"
+              }`}
+            >
+              Filtro
+            </button>
             <button className="px-3 py-1 text-sm hover:bg-gray-700 rounded">Ordenar</button>
           </div>
         </div>
@@ -605,6 +726,279 @@ export default function MondayBoard() {
                   <span className="text-sm">{col.label || col.id}</span>
                 </label>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Advanced Filters */}
+        {showFilters && (
+          <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Filtro por Pessoas */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Pessoas
+                </label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {users?.map((user: any) => (
+                    <label key={user.id} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.assignees.includes(user.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFilters({
+                              ...filters,
+                              assignees: [...filters.assignees, user.id],
+                            });
+                          } else {
+                            setFilters({
+                              ...filters,
+                              assignees: filters.assignees.filter((id) => id !== user.id),
+                            });
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <span className="text-sm text-gray-300">{user.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filtro por Tags */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Tags
+                </label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {tags?.map((tag: any) => (
+                    <label key={tag.id} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.tags.includes(tag.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFilters({
+                              ...filters,
+                              tags: [...filters.tags, tag.id],
+                            });
+                          } else {
+                            setFilters({
+                              ...filters,
+                              tags: filters.tags.filter((id) => id !== tag.id),
+                            });
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <span
+                        className="text-sm px-2 py-1 rounded"
+                        style={{ backgroundColor: tag.color + "20", color: tag.color }}
+                      >
+                        {tag.name}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filtro por Sprints */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Sprints
+                </label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {sprints?.map((sprint: any) => (
+                    <label key={sprint.id} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.sprints.includes(sprint.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFilters({
+                              ...filters,
+                              sprints: [...filters.sprints, sprint.id],
+                            });
+                          } else {
+                            setFilters({
+                              ...filters,
+                              sprints: filters.sprints.filter((id) => id !== sprint.id),
+                            });
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <span className="text-sm text-gray-300">{sprint.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filtro por Data de Vencimento */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Data de Vencimento
+                </label>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">De</label>
+                    <input
+                      type="date"
+                      value={filters.dateRange.start}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          dateRange: { ...filters.dateRange, start: e.target.value },
+                        })
+                      }
+                      className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Até</label>
+                    <input
+                      type="date"
+                      value={filters.dateRange.end}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          dateRange: { ...filters.dateRange, end: e.target.value },
+                        })
+                      }
+                      className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() =>
+                        setFilters({
+                          ...filters,
+                          hasDueDate: filters.hasDueDate === true ? null : true,
+                        })
+                      }
+                      className={`px-2 py-1 text-xs rounded ${
+                        filters.hasDueDate === true
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      }`}
+                    >
+                      Com data
+                    </button>
+                    <button
+                      onClick={() =>
+                        setFilters({
+                          ...filters,
+                          hasDueDate: filters.hasDueDate === false ? null : false,
+                        })
+                      }
+                      className={`px-2 py-1 text-xs rounded ${
+                        filters.hasDueDate === false
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      }`}
+                    >
+                      Sem data
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filtro por Estimativa de Horas */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Estimativa (horas)
+                </label>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Mínimo</label>
+                    <input
+                      type="number"
+                      value={filters.estimateHours.min}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          estimateHours: { ...filters.estimateHours, min: e.target.value },
+                        })
+                      }
+                      className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Máximo</label>
+                    <input
+                      type="number"
+                      value={filters.estimateHours.max}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          estimateHours: { ...filters.estimateHours, max: e.target.value },
+                        })
+                      }
+                      className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                      placeholder="∞"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Filtro por Horas Realizadas */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Realizado (horas)
+                </label>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Mínimo</label>
+                    <input
+                      type="number"
+                      value={filters.actualHours.min}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          actualHours: { ...filters.actualHours, min: e.target.value },
+                        })
+                      }
+                      className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Máximo</label>
+                    <input
+                      type="number"
+                      value={filters.actualHours.max}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          actualHours: { ...filters.actualHours, max: e.target.value },
+                        })
+                      }
+                      className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500"
+                      placeholder="∞"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => {
+                  setFilters({
+                    assignees: [],
+                    tags: [],
+                    sprints: [],
+                    dateRange: { start: "", end: "" },
+                    hasDueDate: null,
+                    estimateHours: { min: "", max: "" },
+                    actualHours: { min: "", max: "" },
+                  });
+                }}
+                className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded text-gray-300"
+              >
+                Limpar Filtros
+              </button>
             </div>
           </div>
         )}
