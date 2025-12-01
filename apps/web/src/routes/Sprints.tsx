@@ -87,8 +87,19 @@ export default function Sprints() {
       return;
     }
     
-    console.log("Enviando dados da sprint:", formData);
-    createSprintMutation.mutate(formData);
+    // Converter datas do formato HTML (YYYY-MM-DD) para ISO datetime
+    // O input type="date" retorna apenas a data, precisamos adicionar hora (00:00:00)
+    const startDateISO = new Date(formData.startDate + "T00:00:00").toISOString();
+    const endDateISO = new Date(formData.endDate + "T23:59:59").toISOString();
+    
+    const dataToSend = {
+      ...formData,
+      startDate: startDateISO,
+      endDate: endDateISO,
+    };
+    
+    console.log("Enviando dados da sprint:", dataToSend);
+    createSprintMutation.mutate(dataToSend);
   };
 
   if (isLoading) {
