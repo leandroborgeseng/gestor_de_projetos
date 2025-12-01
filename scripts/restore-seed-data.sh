@@ -16,6 +16,18 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}🌱 Restaurando dados do seed${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
+echo -e "${RED}⚠️  ATENÇÃO: Este script vai LIMPAR todos os dados e criar dados MOCKADOS!${NC}"
+echo -e "${YELLOW}💡 Se você tem dados reais, faça backup primeiro:${NC}"
+echo -e "${YELLOW}   ./scripts/backup-database.sh${NC}"
+echo ""
+read -p "Tem certeza que deseja continuar? (digite 'sim' para confirmar): " CONFIRM
+
+if [ "$CONFIRM" != "sim" ]; then
+    echo -e "${YELLOW}❌ Operação cancelada${NC}"
+    exit 0
+fi
+
+echo ""
 
 # Verificar se o container da API está rodando
 if ! docker ps | grep -q agilepm-api; then
