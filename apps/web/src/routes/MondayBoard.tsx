@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -87,8 +87,25 @@ export default function MondayBoard() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
-  const [groupBy, setGroupBy] = useState<GroupBy>("none");
-  const [columns, setColumns] = useState<ColumnConfig[]>(DEFAULT_COLUMNS);
+  const [groupBy, setGroupBy] = useState<GroupBy>(savedConfig?.groupBy || "none");
+  // Carregar configurações do localStorage
+  const loadSavedConfig = () => {
+    if (typeof window === "undefined") return null;
+    const saved = localStorage.getItem(`monday-board-config-${id}`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const savedConfig = loadSavedConfig();
+  const [columns, setColumns] = useState<ColumnConfig[]>(
+    savedConfig?.columns || DEFAULT_COLUMNS
+  );
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -98,10 +115,31 @@ export default function MondayBoard() {
   const [sortConfig, setSortConfig] = useState<{
     field: string;
     direction: "asc" | "desc";
-  } | null>(null);
+  } | null>(savedConfig?.sortConfig || null);
+
+  // Salvar configurações no localStorage
+  const saveConfig = () => {
+    if (typeof window === "undefined" || !id) return;
+    const config = {
+      columns,
+      groupBy,
+      filters,
+      sortConfig,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(`monday-board-config-${id}`, JSON.stringify(config));
+  };
+
+  // Salvar quando configurações mudarem
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      saveConfig();
+    }, 500); // Debounce de 500ms
+    return () => clearTimeout(timeoutId);
+  }, [columns, groupBy, filters, sortConfig, id]);
   
   // Filtros avançados
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState(savedConfig?.filters || {
     assignees: [] as string[],
     tags: [] as string[],
     sprints: [] as string[],
