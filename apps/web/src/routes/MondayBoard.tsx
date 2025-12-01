@@ -138,14 +138,11 @@ export default function MondayBoard() {
   const filteredTasks = useMemo(() => {
     if (!tasks) return [];
     
+    // Filtrar apenas tarefas principais (sem parentId ou que não são subtarefas)
     let filtered = tasks.filter((task) => {
-      // Incluir apenas tarefas principais ou subtarefas de tarefas expandidas
-      const isParent = !task.subtasks || task.subtasks.length === 0;
-      if (isParent) return true;
-      
-      // Verificar se o pai está expandido
-      const parent = tasks.find((t) => t.subtasks?.some((st) => st.id === task.id));
-      return parent && expandedRows.has(parent.id);
+      // Verificar se é uma tarefa principal (não tem parentId ou não está em subtasks de outra)
+      const isSubtask = tasks.some((t) => t.subtasks?.some((st) => st.id === task.id));
+      return !isSubtask;
     });
     
     if (searchQuery) {
@@ -160,7 +157,7 @@ export default function MondayBoard() {
     }
     
     return filtered;
-  }, [tasks, searchQuery, selectedStatus, expandedRows]);
+  }, [tasks, searchQuery, selectedStatus]);
 
   // Agrupar tarefas
   const groupedTasks = useMemo(() => {
