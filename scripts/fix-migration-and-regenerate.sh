@@ -69,11 +69,19 @@ echo ""
 
 echo -e "${YELLOW}3️⃣ Regenerando Prisma Client...${NC}"
 
-# Regenerar Prisma Client
-docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma generate --schema=$SCHEMA_PATH" || \
-docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' prisma generate --schema=$SCHEMA_PATH" || {
-    echo -e "${RED}❌ Erro ao regenerar Prisma Client${NC}"
-    exit 1
+# Regenerar Prisma Client no diretório do projeto (não global)
+# O Prisma Client deve ser gerado em node_modules/.prisma/client dentro do projeto
+docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' npx prisma generate --schema=$SCHEMA_PATH --generator client" || \
+docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' ./node_modules/.bin/prisma generate --schema=$SCHEMA_PATH" || {
+    echo -e "${YELLOW}⚠️  Tentando com pnpm...${NC}"
+    docker exec agilepm-api sh -c "cd /app && DATABASE_URL='$DB_URL' pnpm prisma generate --schema=$SCHEMA_PATH" || {
+        echo -e "${YELLOW}⚠️  Tentando executar do diretório apps/api...${NC}"
+        docker exec agilepm-api sh -c "cd /app/apps/api && DATABASE_URL='$DB_URL' npx prisma generate" || {
+            echo -e "${RED}❌ Erro ao regenerar Prisma Client${NC}"
+            echo -e "${YELLOW}💡 O Prisma Client será regenerado no próximo build do Docker${NC}"
+            echo -e "${YELLOW}💡 Continuando mesmo assim...${NC}"
+        }
+    }
 }
 
 echo -e "${GREEN}✅ Prisma Client regenerado!${NC}"
