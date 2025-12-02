@@ -960,11 +960,14 @@ function EditUserModal({ user, isOpen, onClose, onSuccess }: EditUserModalProps)
         role: formData.role,
       };
 
-      if (formData.hourlyRate) {
-        submitData.hourlyRate = parseFloat(formData.hourlyRate);
-      } else {
-        submitData.hourlyRate = null;
+      if (formData.hourlyRate && formData.hourlyRate.trim() !== "") {
+        const parsed = parseFloat(formData.hourlyRate);
+        if (!isNaN(parsed) && parsed >= 0) {
+          submitData.hourlyRate = parsed;
+        }
+        // Se não for um número válido, não incluir o campo
       }
+      // Se hourlyRate estiver vazio, não incluir no submitData
 
       await updateUserMutation.mutateAsync(submitData);
     } finally {

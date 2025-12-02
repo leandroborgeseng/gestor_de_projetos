@@ -21,7 +21,7 @@ export const CreateUserSchema = z.object({
   phone: z.string().regex(phoneRegex, "Telefone inválido. Use o formato (XX) XXXX-XXXX").optional().or(z.literal("")),
   cellphone: z.string().regex(phoneRegex, "Celular inválido. Use o formato (XX) XXXXX-XXXX").optional().or(z.literal("")),
   role: z.enum(["ADMIN", "MANAGER", "MEMBER"]).optional(),
-  hourlyRate: z.number().nonnegative().optional(),
+  hourlyRate: z.number().nonnegative().nullable().optional(),
 });
 
 export const UpdateUserSchema = z.object({
@@ -39,7 +39,7 @@ export const UpdateUserSchema = z.object({
   phone: z.string().regex(phoneRegex, "Telefone inválido. Use o formato (XX) XXXX-XXXX").optional().or(z.literal("")),
   cellphone: z.string().regex(phoneRegex, "Celular inválido. Use o formato (XX) XXXXX-XXXX").optional().or(z.literal("")),
   role: z.enum(["ADMIN", "MANAGER", "MEMBER"]).optional(),
-  hourlyRate: z.number().nonnegative().optional(),
+  hourlyRate: z.number().nonnegative().nullable().optional(),
 });
 
 export const ResetPasswordSchema = z.object({
